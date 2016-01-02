@@ -4,10 +4,13 @@ from bs4 import BeautifulSoup
 from .rbx_data import data
 from .errors import *
 from .trade_log import Trade
+
 import time
 import logging
 import math
 import requests
+import os
+import sys
 
 LOGIN_URL = 'https://www.roblox.com/newlogin'
 TC_URL = 'http://www.roblox.com/My/Money.aspx#/#TradeCurrency_tab'
@@ -17,9 +20,24 @@ logging.basicConfig(
 # For Debugging:
 logging.disable(logging.CRITICAL)
 
-session = requests.Session()
 delay = .1  # Second delay between calculating trades.
 
+# Initializing requests.Session for frozen application
+session = requests.Session()
+def find_data_file(filename):
+    if getattr(sys, 'frozen', False):
+        # The application is frozen
+        datadir = os.path.dirname(sys.executable)
+    else:
+        # The application is not frozen
+        # Change this bit to match where you store your data files:
+        datadir = os.path.dirname(__file__)
+
+    return os.path.join(datadir, filename)
+
+
+cacertpath = find_data_file('cacert.pem')
+os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
 
 class Trader(QtCore.QObject):
 
@@ -261,10 +279,10 @@ class TixTrader(Trader):
         logging.debug("Last robux rate:\t" + str(last_rate))
         if last_rate and rate >= last_rate or current_rate and round_down(rate) >= current_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
-        elif not last_rate and not current_rate:
+        elif not last_rate or not current_rate:
             if not expected_rate:
                 raise BadSpreadError
-            if round_down(rate) > expected_rate:
+            if round_down(rate) > expected_rate - .005:
                 raise WorseRateError(
                     self.currency, self.other_currency, rate, expected_rate)
 
@@ -417,10 +435,10 @@ class RobuxTrader(Trader):
         logging.debug("Last tix rate:\t" + str(last_rate))
         if last_rate and rate <= last_rate or current_rate and rate <= current_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
-        elif not last_rate and not current_rate:
+        elif not last_rate or not current_rate:
             if not expected_rate:
                 raise BadSpreadError
-            if round_down(rate) < expected_rate:
+            if round_down(rate) < expected_rate + .005:
                 raise WorseRateError(self.currency, self.other_currency, rate, expected_rate)
 
     def balance_rate(self, amount, rate, expected_rate):
