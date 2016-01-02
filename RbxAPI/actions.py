@@ -53,7 +53,7 @@ class Trader(QtCore.QObject):
 
     @current_trade.setter
     def current_trade(self, value):
-        print(self._current_trade, value)
+        logging.info(self._current_trade, value)
         if self._current_trade:
             self.trade_log.complete_trade(self._current_trade)
         self._current_trade = value
@@ -95,7 +95,7 @@ class Trader(QtCore.QObject):
 
     def get_trade_remainder(self):
         rem_str = get_raw_data(data[self.currency]['trade_remainder'])
-        print('Rem str: '+ str(rem_str))
+        logging.info('Rem str: '+ str(rem_str))
         if rem_str:
             return to_num(rem_str)
 
@@ -196,9 +196,9 @@ class TixTrader(Trader):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
         amount_remain = self.get_trade_remainder()
-        print("Remainder FROM TIX: " + str(amount_remain))
+        logging.info("Remainder FROM TIX: " + str(amount_remain))
         if amount_remain and self.current_trade:
-            print("TIX UPDATE amount_remain: " + str(amount_remain) + "")
+            logging.info("TIX UPDATE amount_remain: " + str(amount_remain) + "")
             if amount_remain < self.current_trade.remaining1:
                 self.current_trade.update(amount_remain)
                 this_rate = self.current_trade.current_rate
@@ -290,7 +290,7 @@ class TixTrader(Trader):
         return to_trade, receive, actual_rate
 
     def fully_complete_trade(self):
-        print("Tix trade fully complete")
+        logging.info("Tix trade fully complete")
         completed_trade = self.current_trade
         if completed_trade:
             completed_trade.update(0)
@@ -345,9 +345,9 @@ class RobuxTrader(Trader):
         logging.info('Updating trade')
         """If a current trade is active, update its information for the trade log."""
         amount_remain = self.get_trade_remainder()
-        print("Remainder FROM ROBUX: " + str(amount_remain))
+        logging.info("Remainder FROM ROBUX: " + str(amount_remain))
         if amount_remain and self.current_trade:
-            print('ROBUX AMOUNT REMAIN: {} START: {}'.format(str(amount_remain), str(self.current_trade.remaining1)))
+            logging.info('ROBUX AMOUNT REMAIN: {} START: {}'.format(str(amount_remain), str(self.current_trade.remaining1)))
             if amount_remain < self.current_trade.remaining1:
                 self.current_trade.update(amount_remain)
                 this_rate = self.current_trade.current_rate 
@@ -446,7 +446,7 @@ class RobuxTrader(Trader):
     def fully_complete_trade(self):
         logging.info("Robux trade fully complete.")
         completed_trade = self.current_trade
-        print('Robux fully complete')
+        logging.info('Robux fully complete')
         if completed_trade: # Trade has been fully completed?
             completed_trade.update(0)
             Trader.current_robux_rate = 0
