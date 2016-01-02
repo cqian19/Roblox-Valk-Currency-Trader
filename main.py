@@ -1,5 +1,4 @@
-from PySide.QtCore import *
-from PySide.QtGui import *
+from PySide import QtCore, QtGui
 from functools import partial
 from RbxAPI import *
 
@@ -14,7 +13,7 @@ logging.basicConfig(
 # For Debugging:
 # logging.disable(logging.CRITICAL)
 
-class MainDialog(QMainWindow, gui.Ui_MainWindow):
+class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -22,7 +21,7 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
 
         self.first_start = False
         self.started = False
-
+        # Traders
         self.trade_log = TradeLog()
         self.tix_trader = TixTrader(self.trade_log)
         self.robux_trader = RobuxTrader(self.trade_log)
@@ -42,7 +41,7 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
             partial(self.trade_all_pressed, self.robux_trader, self.robuxAmount))
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
-        #Config
+        # Config
         self.initialize_config()
 
         # Start
@@ -120,15 +119,15 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
             self.add_trade_gui(text, target)
 
     def make_row(self, text):
-        new_row = QListWidgetItem(text)
-        font = QFont()
+        new_row = QtGui.QListWidgetItem(text)
+        font = QtGui.QFont()
         font.setFamily("Lucida Sans Unicode")
         font.setBold(True)
         font.setPointSize(8)
         new_row.setFont(font)
         # Black font color
-        new_row.setForeground(QBrush(QColor('black')))
-        new_row.setSizeHint(QSize(20, 25))
+        new_row.setForeground(QtGui.QBrush(QtGui.QColor('black')))
+        new_row.setSizeHint(QtCore.QSize(20, 25))
         return new_row
 
     def add_trade_gui(self, text, table):
@@ -170,7 +169,7 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
             trader.set_config('trade_all', False)
 
     def _assign_thread(self, obj):
-        thread = QThread()
+        thread = QtCore.QThread()
         obj.moveToThread(thread)
         thread.started.connect(obj.start)
         return thread
@@ -206,7 +205,7 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
             self.start_bots()
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
+    app = QtGui.QApplication(sys.argv)
     form = MainDialog()
     form.show()
     sys.exit(app.exec_())
