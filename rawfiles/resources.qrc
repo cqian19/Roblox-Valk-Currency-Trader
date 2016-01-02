@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0"> <qresource prefix="/images">
+    <file alias="logo.png">../images/logo.png</file>
+    <file alias="robux.png">../images/robux.png</file>
+    <file alias="tix.png">../images/tix.png</file>
+    <file alias="login.png">../images/login.png</file>
+    <file alias="login_down.png">../images/login_down.png</file>
+  </qresource>
+</RCC>
