@@ -31,7 +31,7 @@ def find_data_file(filename):
     else:
         # The application is not frozen
         # Change this bit to match where you store your data files:
-        datadir = os.path.dirname(__file__)
+        datadir = os.path.dirname(os.path.abspath(__file__))
 
     return os.path.join(datadir, filename)
 
@@ -283,8 +283,7 @@ class TixTrader(Trader):
             if not expected_rate:
                 raise BadSpreadError
             if round_down(rate) > expected_rate - .005:
-                raise WorseRateError(
-                    self.currency, self.other_currency, rate, expected_rate)
+                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate-.005)
 
     def balance_rate(self, amount, rate, expected_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding robux to receive"""
@@ -439,7 +438,7 @@ class RobuxTrader(Trader):
             if not expected_rate:
                 raise BadSpreadError
             if round_down(rate) < expected_rate + .005:
-                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate)
+                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate+.005)
 
     def balance_rate(self, amount, rate, expected_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
