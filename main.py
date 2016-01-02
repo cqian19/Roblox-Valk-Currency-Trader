@@ -66,6 +66,23 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
         self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
         self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
 
+    def save_config(self):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+
+        tix_settings = config['TixTrader']
+        tix_settings['split_trades'] = str(self.tixSplitTrades.isChecked())
+        tix_settings['amount_to_trade'] = str(self.tixAmount.value())
+        tix_settings['trade_all'] = str(self.tixTradeAll.isChecked())
+
+        robux_settings = config['RobuxTrader']
+        robux_settings['split_trades'] = str(self.robuxSplitTrades.isChecked())
+        robux_settings['amount_to_trade'] = str(self.robuxAmount.value())
+        robux_settings['trade_all'] = str(self.robuxTradeAll.isChecked())
+
+        with open('config.ini', 'w') as configfile:
+            config.write(configfile)
+
     def on_trade_added(self, trade):
         target = self.currentTradeTable
         tup = (trade.amount1, abbr[trade.type1], round_down(trade.current_rate))
@@ -123,6 +140,7 @@ class MainDialog(QMainWindow, gui.Ui_MainWindow):
         """Builtin method executed when GUI is closed."""
         if self.first_start:
             self.stop_bots()
+        self.save_config()
         print('Ending bot')
 
     def login_pressed(self):
