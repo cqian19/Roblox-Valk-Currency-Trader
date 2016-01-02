@@ -6,29 +6,28 @@ import os
 
 includes = ['lxml.etree','lxml._elementpath']
 include_files = ['images/', 'guifiles/', 'config.ini', (requests.certs.where(),'cacert.pem')]
-packages = ['os', 'requests', 'PySide.QtCore', 'PySide.QtGui', 'RbxAPI', ]
+packages = ['inspect', 'os', 'requests', 'PySide.QtCore', 'PySide.QtGui', 'RbxAPI', ]
 
 
 buildOptions = dict(
-    create_shared_zip=False,
-    append_script_to_exe=True,
     include_files=include_files,
     packages=packages,
     includes=includes
-
 )
 
 executables = [
     Executable(
         script='main.py',
-        targetName='RbxTCBot.exe',
+        targetName='ValkTCBot.exe',
         base="Win32GUI", # THIS ONE IS IMPORTANT FOR GUI APPLICATION
-        icon='images/bot_icon.ico'
+        icon='images/bot_icon.ico',
+        shortcutName= "Valk TC Bot",
+        shortcutDir="DesktopFolder",
     )
 ]
 
 setup(
-    name="Roblox TC Bot",
+    name="Valk TC Bot",
     version="1.0",
     description="A trade currency bot for Roblox.",
     options=dict(build_exe=buildOptions),
