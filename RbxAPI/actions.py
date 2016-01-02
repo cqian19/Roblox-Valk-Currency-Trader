@@ -1,6 +1,5 @@
 from PySide import QtCore
 from lxml import html
-from bs4 import BeautifulSoup
 from .rbx_data import data
 from .errors import *
 from .trade_log import Trade
@@ -20,7 +19,7 @@ logging.basicConfig(
 # For Debugging:
 logging.disable(logging.CRITICAL)
 
-delay = .1  # Second delay between calculating trades.
+delay = .01  # Second delay between calculating trades.
 
 # Initializing requests.Session for frozen application
 session = requests.Session()
@@ -181,7 +180,6 @@ class Trader(QtCore.QObject):
                     if self.check_better_rate():
                         self.do_trade()
                     else:
-                        self.update_current_trade()
                         self.check_current_worse_trade()
                         self.check_trade_gap()
             except BotStoppedError:
@@ -210,10 +208,11 @@ class TixTrader(Trader):
         self.other_currency = 'Robux'
         super().__init__(self.currency)
 
-    def update_current_trade(self):
+    def update_current_trade(self, amount_remain=None):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
-        amount_remain = self.get_trade_remainder()
+        if amount_remain is None:
+            amount_remain = self.get_trade_remainder()
         logging.info("Remainder FROM TIX: " + str(amount_remain))
         if amount_remain and self.current_trade:
             logging.info("TIX UPDATE amount_remain: " + str(amount_remain) + "")
@@ -223,7 +222,7 @@ class TixTrader(Trader):
                 Trader.current_tix_rate = this_rate
                 Trader.last_tix_rate = max(this_rate, Trader.last_tix_rate)
 
-        elif self.current_trade:  #  Trade is complete.
+        elif amount_remain == 0 and self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
 
     def check_current_worse_trade(self):
@@ -251,7 +250,7 @@ class TixTrader(Trader):
             trade_info = data[self.currency]['next_trade_info']
             next_tix, next_rate = self.get_available_trade_info(trade_info)
             diff = next_rate - self.current_trade.current_rate
-            if diff < -.04:
+            if diff < -.025:
                 logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                 self.cancel_trades()
 
@@ -271,6 +270,8 @@ class TixTrader(Trader):
             elif not self.last_robux_rate and not self.current_robux_rate and top_rate < self.get_other_rate():
                 self.cancel_trades()
                 return True
+        elif our_tix:
+            self.update_current_trade(our_tix)
         return False
 
     def test_rate(self, rate, expected_rate):
@@ -358,10 +359,11 @@ class RobuxTrader(Trader):
         self.other_currency = 'Tickets'
         super().__init__(self.currency)
 
-    def update_current_trade(self):
+    def update_current_trade(self, amount_remain=None):
         logging.info('Updating trade')
         """If a current trade is active, update its information for the trade log."""
-        amount_remain = self.get_trade_remainder()
+        if amount_remain is None:
+            amount_remain = self.get_trade_remainder()
         logging.info("Remainder FROM ROBUX: " + str(amount_remain))
         if amount_remain and self.current_trade:
             logging.info('ROBUX AMOUNT REMAIN: {} START: {}'.format(str(amount_remain), str(self.current_trade.remaining1)))
@@ -374,7 +376,7 @@ class RobuxTrader(Trader):
                 else:
                     Trader.last_robux_rate = this_rate
 
-        elif self.current_trade:
+        elif amount_remain == 0 and self.current_trade:
             self.fully_complete_trade()
 
     def check_current_worse_trade(self):
@@ -408,7 +410,7 @@ class RobuxTrader(Trader):
             trade_info = data[self.currency]['next_trade_info']
             next_robux, next_rate = self.get_available_trade_info(trade_info)
             diff = next_rate - self.current_trade.current_rate
-            if diff > .04:
+            if diff > .025:
                 logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                 self.cancel_trades()
 
@@ -427,6 +429,8 @@ class RobuxTrader(Trader):
             elif not self.last_tix_rate and not self.current_tix_rate and top_rate > self.get_other_rate():
                 self.cancel_trades()
                 return True
+        elif our_robux:
+            self.update_current_trade(our_robux)
         return False
 
     def test_rate(self, rate, expected_rate):
@@ -518,10 +522,10 @@ def get_raw_data(d):
 
 
 def get_auth_tools():
-    r = session.get(TC_URL)
-    b = BeautifulSoup(r.text, 'lxml')
-    viewstate = b.select('#__VIEWSTATE')[0]['value']
-    eventvalidation = b.select('#__EVENTVALIDATION')[0]['value']
+    tree = get_tree()
+    # VIEWSTATE and EVENTVALIDATION must be from the same session
+    viewstate = tree.xpath('//input[@name="__VIEWSTATE"]')[0].attrib['value']
+    eventvalidation = tree.xpath('//input[@name="__EVENTVALIDATION"]')[0].attrib['value']
     return viewstate, eventvalidation
 
 
