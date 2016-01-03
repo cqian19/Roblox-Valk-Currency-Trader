@@ -219,10 +219,11 @@ class TixTrader(Trader):
         if amount_remain and self.current_trade:
             logging.info("TIX UPDATE amount_remain: " + str(amount_remain) + "")
             if amount_remain < self.current_trade.remaining1:
+                start_rate = self.current_trade.start_rate
+                Trader.current_tix_rate = start_rate
+                Trader.last_tix_rate = max(start_rate, Trader.last_tix_rate)
                 self.current_trade.update(amount_remain, top_rate)
-                this_rate = self.current_trade.current_rate
-                Trader.current_tix_rate = this_rate
-                Trader.last_tix_rate = max(this_rate, Trader.last_tix_rate)
+                
 
         elif amount_remain == 0 and self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
@@ -280,10 +281,10 @@ class TixTrader(Trader):
     def test_rate(self, rate, expected_rate):
         """Tests if the rate is better than the last rate"""
         current_rate, last_rate = self.current_robux_rate, self.last_robux_rate
-        logging.debug("Last robux rate:\t" + str(last_rate))
+        print("Last robux rate:\t" + str(last_rate))
         if last_rate and rate >= last_rate or current_rate and round_down(rate) >= current_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
-        elif not last_rate or not current_rate:
+        elif not last_rate and not current_rate:
             if not expected_rate:
                 raise BadSpreadError
             if round_down(rate) > expected_rate - .0015:
@@ -371,13 +372,14 @@ class RobuxTrader(Trader):
         if amount_remain and self.current_trade:
             logging.info('ROBUX AMOUNT REMAIN: {} START: {}'.format(str(amount_remain), str(self.current_trade.remaining1)))
             if amount_remain < self.current_trade.remaining1:
-                self.current_trade.update(amount_remain, top_rate)
-                this_rate = self.current_trade.current_rate 
+                start_rate = self.current_trade.start_rate 
                 Trader.current_robux_rate = this_rate
                 if Trader.last_robux_rate:
                     Trader.last_robux_rate = min(this_rate, Trader.last_robux_rate)
                 else:
                     Trader.last_robux_rate = this_rate
+                self.current_trade.update(amount_remain, top_rate)
+                
 
         elif amount_remain == 0 and self.current_trade:
             self.fully_complete_trade()
@@ -439,10 +441,10 @@ class RobuxTrader(Trader):
 
     def test_rate(self, rate, expected_rate):
         current_rate, last_rate = self.current_tix_rate, self.last_tix_rate
-        logging.debug("Last tix rate:\t" + str(last_rate))
+        print("Last tix rate:\t" + str(last_rate))
         if last_rate and rate <= last_rate or current_rate and rate <= current_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
-        elif not last_rate or not current_rate:
+        elif not last_rate and not current_rate:
             if not expected_rate:
                 raise BadSpreadError
             if round_down(rate) < expected_rate + .0015:
