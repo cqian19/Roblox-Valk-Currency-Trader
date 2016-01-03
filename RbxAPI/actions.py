@@ -342,11 +342,11 @@ class TixTrader(Trader):
         if not Trader.last_tix_rate:
             Trader.last_tix_rate = rate
         Trader.current_tix_rate = rate
-        self.trade_log.add_trade(new_trade)
         logging.info("Trade success!\t" + str(self.current_trade))
 
         self.submit_trade(to_trade, receive)
         self.current_trade = new_trade
+        self.trade_log.add_trade(new_trade)
 
 
 class RobuxTrader(Trader):
@@ -502,10 +502,10 @@ class RobuxTrader(Trader):
         if not Trader.last_robux_rate:
             Trader.last_robux_rate = rate
         Trader.current_robux_rate = rate
-        self.trade_log.add_trade(new_trade)
-
         self.submit_trade(to_trade, receive)
         self.current_trade = new_trade
+        self.trade_log.add_trade(new_trade)
+
 
 
 def get_tree():
