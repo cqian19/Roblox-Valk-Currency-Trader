@@ -25,10 +25,11 @@ shortcut_table = [
 ]
 
 msi_data = dict(
-    Shortcut=shortcut_table
+    Shortcut=shortcut_table,
 )
 
 bdist_msi_options = dict(
+    initial_target_dir='C:\ValkTCBot',
     data=msi_data
 )
 
@@ -44,7 +45,7 @@ executables = [
         script='main.py',
         targetName='ValkTCBot.exe',
         base="Win32GUI", # THIS ONE IS IMPORTANT FOR GUI APPLICATION
-        icon='images/bot_icon.ico',
+        icon='images/bot_desktop_icon.ico',
     )
 ]
 

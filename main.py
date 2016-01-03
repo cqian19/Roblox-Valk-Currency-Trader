@@ -3,8 +3,8 @@ from functools import partial
 from RbxAPI import *
 
 import guifiles.mainGui as gui
-import sys
 
+import sys
 import configparser
 import logging
 
@@ -12,6 +12,7 @@ logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>")
 # For Debugging:
 # logging.disable(logging.CRITICAL)
+
 
 class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
@@ -79,8 +80,9 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         robux_settings['amount_to_trade'] = str(self.robuxAmount.value())
         robux_settings['trade_all'] = str(self.robuxTradeAll.isChecked())
 
-        with open('config.ini', 'w') as configfile:
+        with open('config.ini', 'r+') as configfile:
             config.write(configfile)
+        print(config, 'saved config')
 
     def on_trade_added(self, trade):
         target = self.currentTradeTable
