@@ -464,7 +464,7 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QtGui.QApplication.translate("MainWindow", "MainWindow", None, QtGui.QApplication.UnicodeUTF8))
+        MainWindow.setWindowTitle(QtGui.QApplication.translate("MainWindow", "Valk TC Bot", None, QtGui.QApplication.UnicodeUTF8))
         self.label_2.setText(QtGui.QApplication.translate("MainWindow", "Password", None, QtGui.QApplication.UnicodeUTF8))
         self.label.setText(QtGui.QApplication.translate("MainWindow", "Username", None, QtGui.QApplication.UnicodeUTF8))
         self.errorMessage.setText(QtGui.QApplication.translate("MainWindow", "<html><head/><body><p><span style=\" color:#000000;\">Login failed! Note that Roblox will lock you out after a certain number of failed attempts.</span></p></body></html>", None, QtGui.QApplication.UnicodeUTF8))
