@@ -19,8 +19,8 @@ After installation, a shortcut will appear on your desktop. Run it to start the 
 3. Press the "Start" button to begin the bot, and "Stop" to finish.
 
 ## Settings
- - **Amount:** Sets the maximum amount of tix/robux for the bot to trade. The bot will not always trade at this amount for accuracy, but it will trade close to the amount.
- - **Trade all:** Trades all of your current tix/robux. This works best since Recommended setting: ON
+ - **Amount:** Sets the maximum amount of tix/robux for the bot to trade. The bot will not always trade at this amount for accuracy, but it will trade close to the amount. WARNING: The bot will NOT trade if you have less than the set amount. Use trade all to avoid this.
+ - **Trade all:** Trades all of your current tix/robux. This works best since after trading, you may end up with less of one currency than the set amount option, and the bot will not trade. Recommended setting: ON
  - **Split trades:** Enables/disables split trades. A split trade allows people to exchange separately for the money you submit. Disabling this means the trade will only go through if someone trades the ENTIRE amount at once. Recommended setting: ON
 
 ## Known Issues
