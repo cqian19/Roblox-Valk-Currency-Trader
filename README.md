@@ -2,9 +2,10 @@
 Valk TC Bot is a new, fully-functional trade currency bot for ROBLOX built with an intuitive GUI using [PySide](https://pyside.github.io/docs/pyside/index.html).
 
 ## Features
- - Full GUI interface with customizable settings and real-time trade log. See what the bot is doing!
+ - Full GUI interface with customizable settings that save every time you open it! 
+ - Real-time GUI trade log. See what the bot is doing!
  - Competes with other bots.
- - Able to trade both currencies at the same time (Most bots trade only one at a time).
+ - Able to trade both currencies at the same time (Most bots trade only one currency at a time).
  - Fast, accurate trading to avoid losing money.
  - Login and trade from the GUI. No browser needs to be opened.
  
@@ -29,7 +30,7 @@ After installation, a shortcut will appear on your desktop. Run it to start the 
     **A: Antivirus may be scanning/blocking the program. Disable antivirus and try again. If you do not trust this bot, run a scan on it.**
 
 
-2. **I: The config isn't saving! (Errno 13)
+2. **I: The config isn't saving! (Errno 13)**
 	
 	**A: Run the bot as an administrator(right-click the shortcut>Run as administrator)**
 	
