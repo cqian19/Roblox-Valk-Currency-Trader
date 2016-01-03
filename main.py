@@ -79,10 +79,12 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         robux_settings['split_trades'] = str(self.robuxSplitTrades.isChecked())
         robux_settings['amount_to_trade'] = str(self.robuxAmount.value())
         robux_settings['trade_all'] = str(self.robuxTradeAll.isChecked())
-
-        with open('config.ini', 'r+') as configfile:
-            config.write(configfile)
-        print(config, 'saved config')
+        try:
+            with open('config.ini', 'r+') as configfile:
+                config.write(configfile)
+        except Exception as e:
+            print(e)
+            print('Cannot save config settings. Try running as administrator next time.')
 
     def on_trade_added(self, trade):
         target = self.currentTradeTable
