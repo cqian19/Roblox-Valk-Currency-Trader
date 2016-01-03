@@ -117,7 +117,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
                    round_down(trade.start_rate), trade.amount2, abbr[trade.type2])
             text = "{} {} @ {:.3f} for {} {} ".format(*tup)
         elif amount_traded > 0:  # Trade cancelled but some went through
-            tup = (amount_traded, abbr[trade.type1], round_down(trade.current_rate))
+            tup = (amount_traded, abbr[trade.type1], round_down(trade.start_rate))
             text = "{} {} @ {:.3f} (Semi-complete)".format(*tup)
         if text:
             self.add_trade_gui(text, target)
