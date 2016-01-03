@@ -67,17 +67,14 @@ class TradeLog(QObject):
         super().__init__()
         self.start_time = time.time()
         self.log = []
-        self.active_trades = []
 
     def add_trade(self, trade):
-        self.active_trades.append(trade)
         self.trade_added.emit(trade)
 
     def complete_trade(self, trade):
         trade.complete_time = datetime.datetime.now()
         logging.info("Completed trade!")
         logging.debug("Start amount1: {} \t Remaining amount1: {}".format(str(trade.amount1),str(trade.remaining1)))
-        self.active_trades.remove(trade)
         self.log.append(trade)
         self.trade_completed.emit(trade)
 

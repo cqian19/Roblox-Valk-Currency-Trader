@@ -70,9 +70,10 @@ class Trader(QtCore.QObject):
     @current_trade.setter
     def current_trade(self, value):
         logging.info(self._current_trade, value)
-        if self._current_trade:
-            self.trade_log.complete_trade(self._current_trade)
+        old_trade = self._current_trade
         self._current_trade = value
+        if old_trade:
+            self.trade_log.complete_trade(old_trade)
 
     def set_config(self, option, value):
         self.config[option] = value
@@ -107,6 +108,8 @@ class Trader(QtCore.QObject):
 
     def get_tolerance(self, amount):
         """A magical method that determines the minimum % (in decimal) to trade"""
+        if amount//10 == 0:
+            return .9
         return min(.9 + .025*math.floor(math.log(amount//10, 10)), .975)
 
     def get_trade_remainder(self):
@@ -189,7 +192,7 @@ class Trader(QtCore.QObject):
                 logging.debug(e)
                 #time.sleep(1)
             except Exception as e:
-                logging.error(e)
+                print(e)
 
     def stop(self):
         self.started = False
@@ -250,7 +253,7 @@ class TixTrader(Trader):
             trade_info = data[self.currency]['next_trade_info']
             next_tix, next_rate = self.get_available_trade_info(trade_info)
             diff = next_rate - self.current_trade.current_rate
-            if diff < -.025:
+            if diff < -.015:
                 logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                 self.cancel_trades()
 
@@ -283,8 +286,8 @@ class TixTrader(Trader):
         elif not last_rate or not current_rate:
             if not expected_rate:
                 raise BadSpreadError
-            if round_down(rate) > expected_rate - .005:
-                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate-.005)
+            if round_down(rate) > expected_rate - .0015:
+                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate-.0015)
 
     def balance_rate(self, amount, rate, expected_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding robux to receive"""
@@ -411,7 +414,7 @@ class RobuxTrader(Trader):
             trade_info = data[self.currency]['next_trade_info']
             next_robux, next_rate = self.get_available_trade_info(trade_info)
             diff = next_rate - self.current_trade.current_rate
-            if diff > .025:
+            if diff > .015:
                 logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                 self.cancel_trades()
 
@@ -442,8 +445,8 @@ class RobuxTrader(Trader):
         elif not last_rate or not current_rate:
             if not expected_rate:
                 raise BadSpreadError
-            if round_down(rate) < expected_rate + .005:
-                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate+.005)
+            if round_down(rate) < expected_rate + .0015:
+                raise WorseRateError(self.currency, self.other_currency, rate, expected_rate+.0015)
 
     def balance_rate(self, amount, rate, expected_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""

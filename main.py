@@ -90,8 +90,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         target = self.currentTradeTable
         tup = (trade.amount1, abbr[trade.type1], round_down(trade.current_rate))
         text = "{} {} @ {:.3f}".format(*tup)
-        new_row = self.add_trade_gui(text, target)
-        trade.row = new_row
+        trade.row = self.add_trade_gui(text, target)
         trade.trade_updated.connect(self.on_trade_updated)
 
     def on_trade_updated(self, trade):
@@ -120,19 +119,24 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
             tup = (amount_traded, abbr[trade.type1], round_down(trade.start_rate))
             text = "{} {} @ {:.3f} (Semi-complete)".format(*tup)
         if text:
-            self.add_trade_gui(text, target)
+            trade.row = self.add_trade_gui(text, target)
 
     def make_row(self, text):
-        new_row = QtGui.QListWidgetItem(text)
-        font = QtGui.QFont()
-        font.setFamily("Lucida Sans Unicode")
-        font.setBold(True)
-        font.setPointSize(8)
-        new_row.setFont(font)
-        # Black font color
-        new_row.setForeground(QtGui.QBrush(QtGui.QColor('black')))
-        new_row.setSizeHint(QtCore.QSize(20, 25))
-        return new_row
+        if not hasattr(self, 'new_row'):
+            new_row = QtGui.QListWidgetItem(text)
+            font = QtGui.QFont()
+            font.setFamily("Lucida Sans Unicode")
+            font.setBold(True)
+            font.setPointSize(8)
+            new_row.setFont(font)
+            # Black font color
+            new_row.setForeground(QtGui.QBrush(QtGui.QColor('black')))
+            new_row.setSizeHint(QtCore.QSize(20, 25))
+            self.new_row = new_row
+            return new_row
+        cl = self.new_row.clone()
+        cl.setText(text)
+        return cl
 
     def add_trade_gui(self, text, table):
         new_row = self.make_row(text)
