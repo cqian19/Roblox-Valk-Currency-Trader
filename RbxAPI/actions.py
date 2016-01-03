@@ -207,7 +207,7 @@ class TixTrader(Trader):
         self.other_currency = 'Robux'
         super().__init__(self.currency)
 
-    def update_current_trade(self, amount_remain=None):
+    def update_current_trade(self, amount_remain=None, top_rate=None):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
         if amount_remain is None:
@@ -216,7 +216,7 @@ class TixTrader(Trader):
         if amount_remain and self.current_trade:
             logging.info("TIX UPDATE amount_remain: " + str(amount_remain) + "")
             if amount_remain < self.current_trade.remaining1:
-                self.current_trade.update(amount_remain)
+                self.current_trade.update(amount_remain, top_rate)
                 this_rate = self.current_trade.current_rate
                 Trader.current_tix_rate = this_rate
                 Trader.last_tix_rate = max(this_rate, Trader.last_tix_rate)
@@ -230,8 +230,9 @@ class TixTrader(Trader):
             rate = self.current_trade.current_rate
             if self.last_robux_rate and rate > self.last_robux_rate or self.current_robux_rate and rate > self.current_robux_rate:
                 self.cancel_trades()
-            elif not self.last_robux_rate and not self.current_robux_rate and rate > self.get_other_rate():
-                self.cancel_trades()
+            elif not self.last_robux_rate and not self.current_robux_rate:
+                if rate > self.get_other_rate():
+                    self.cancel_trades()
 
     def get_available_trade_info(self, trade_info):
          # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
@@ -270,7 +271,7 @@ class TixTrader(Trader):
                 self.cancel_trades()
                 return True
         elif our_tix:
-            self.update_current_trade(our_tix)
+            self.update_current_trade(our_tix, top_rate)
         return False
 
     def test_rate(self, rate, expected_rate):
@@ -358,7 +359,7 @@ class RobuxTrader(Trader):
         self.other_currency = 'Tickets'
         super().__init__(self.currency)
 
-    def update_current_trade(self, amount_remain=None):
+    def update_current_trade(self, amount_remain=None, top_rate=None):
         logging.info('Updating trade')
         """If a current trade is active, update its information for the trade log."""
         if amount_remain is None:
@@ -367,7 +368,7 @@ class RobuxTrader(Trader):
         if amount_remain and self.current_trade:
             logging.info('ROBUX AMOUNT REMAIN: {} START: {}'.format(str(amount_remain), str(self.current_trade.remaining1)))
             if amount_remain < self.current_trade.remaining1:
-                self.current_trade.update(amount_remain)
+                self.current_trade.update(amount_remain, top_rate)
                 this_rate = self.current_trade.current_rate 
                 Trader.current_robux_rate = this_rate
                 if Trader.last_robux_rate:
@@ -384,8 +385,9 @@ class RobuxTrader(Trader):
             rate = self.current_trade.current_rate
             if self.last_tix_rate and rate < self.last_tix_rate or self.current_tix_rate and rate < self.current_tix_rate:
                 self.cancel_trades()
-            elif not self.last_tix_rate and not self.current_tix_rate and rate < self.get_other_rate():
-                self.cancel_trades()
+            elif not self.last_tix_rate and not self.current_tix_rate:
+                if rate < self.get_other_rate():
+                    self.cancel_trades()
 
     def get_available_trade_info(self, trade_info):
         """Parses html of a trade from the available trade columns"""
@@ -429,7 +431,7 @@ class RobuxTrader(Trader):
                 self.cancel_trades()
                 return True
         elif our_robux:
-            self.update_current_trade(our_robux)
+            self.update_current_trade(our_robux, top_rate)
         return False
 
     def test_rate(self, rate, expected_rate):
