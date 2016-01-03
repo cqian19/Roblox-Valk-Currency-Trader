@@ -28,6 +28,17 @@ After installation, a shortcut will appear on your desktop. Run it to start the 
 
     **A: Antivirus may be scanning/blocking the program. Disable antivirus and try again. If you do not trust this bot, run a scan on it.**
 
+
+2. **I: The config isn't saving! (Errno 13)
+	
+	**A: Run the bot as an administrator(right-click the shortcut>Run as administrator)**
+	
+	
+3. **I: The bot isn't trading!**
+
+	**A: The bot is looking for a good rate to trade at. Be patient.**
+	
+	
 ## Other Issues/Bugs?
 Submit an issue [here](https://github.com/cqian19/Roblox-Valk-TC-Bot/issues).
 
