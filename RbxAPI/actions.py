@@ -162,8 +162,7 @@ class Trader(QtCore.QObject):
         self.trade_payload[data['receive_box']] = str(amount_to_receive)
         self.trade_payload['__EVENTVALIDATION'] = ev
         self.trade_payload['__VIEWSTATE'] = vs
-        r = session.post(TC_URL, data=self.trade_payload)
-        print(r.status_code)
+        session.post(TC_URL, data=self.trade_payload)
 
     def check_bot_stopped(self):
         if not self.started:
@@ -342,20 +341,17 @@ class TixTrader(Trader):
             amount = our_money
         else:
             amount = min(self.config['amount'], our_money)
-        if not amount:
-            return
-        if amount > our_money:
-            raise NoMoneyError
+        if not amount or amount > our_money:
+            raise NoMoneyError(self.currency)
         # Especially if split trades are on, don't constantly trade small amounts
         self.check_bot_stopped()
-
+        self.check_no_recent_trades()
         to_trade, receive, rate = self.calculate_trade(amount)
         logging.debug("Actual rate: " + str(rate) + " " + str(to_trade) + " " +
                       self.currency + "for " + str(receive) + " " + self.other_currency)
 
         # Double check if trading has been stopped
         self.check_bot_stopped()
-        self.check_no_recent_trades()
         self.submit_trade(to_trade, receive)
 
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
@@ -514,10 +510,9 @@ class RobuxTrader(Trader):
             amount = our_money
         else:
             amount = min(self.config['amount'], our_money)
-        if not amount:
-            return
-        if amount > our_money:
-            raise NoMoneyError
+        if not amount or amount > our_money:
+            raise NoMoneyError(self.currency)
+
         self.check_bot_stopped()
         self.check_no_recent_trades()
 
