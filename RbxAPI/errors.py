@@ -11,7 +11,13 @@ class LoginError(Exception):
     def __str__(self):
         return self.msg
 
+class TradeGapError(Exception):
+    """Raised when your trade rate is far better than the next, decreasing potential profit"""
+    msg = "Trade gap too big. Retrying..."
 
+    def __str__(self):
+        return self.msg
+        
 class LowRateError(Exception):
 
     """Raised when the trade rate is below a certain threshold"""
