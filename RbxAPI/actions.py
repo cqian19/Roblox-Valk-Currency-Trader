@@ -21,6 +21,8 @@ logging.disable(logging.CRITICAL)
 
 delay = .01  # Second delay between calculating trades.
 gap = .025 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
+reset_time = 600 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
+
 # Initializing requests.Session for frozen application
 session = requests.Session()
 def find_data_file(filename):
@@ -49,6 +51,7 @@ class Trader(QtCore.QObject):
         self.started = False
         self.currency = currency
         self._current_trade = None
+        self.last_trade_time = time.time()
         self.trade_payload = {
             data['give_type']: self.currency,
             data['receive_type']: self.other_currency,
@@ -119,7 +122,7 @@ class Trader(QtCore.QObject):
     def check_trades(self):
         """Returns True if a trade is still active"""
         return get_raw_data(data[self.currency]['trades']) == []
-
+            
     def cancel_trades(self):
         payload = {
             '__EVENTTARGET': data[self.currency]['cancel_bid']
@@ -325,6 +328,14 @@ class TixTrader(Trader):
             Trader.last_tix_rate = max(completed_trade.current_rate, Trader.last_tix_rate)
             self.current_trade = None
 
+    def check_no_recent_trades(self):
+        """If the trader hasn't traded in a while, reset the last_robux_rate so the bot 
+        could possibly trade at a worse rate but gain in the long run."""
+        now = time.time()
+        if now - self.last_trade_time > reset_time:
+            self.last_trade_time = now
+            Trader.last_robux_rate = 0
+
     def do_trade(self):
         our_money = self.get_currency()
         if self.config['trade_all']:
@@ -344,6 +355,7 @@ class TixTrader(Trader):
 
         # Double check if trading has been stopped
         self.check_bot_stopped()
+        self.check_no_recent_trades()
         self.submit_trade(to_trade, receive)
 
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
@@ -426,7 +438,6 @@ class RobuxTrader(Trader):
 
     def check_better_rate(self):
         """Check if a better rate for robux to tix exists"""
-
         # See rbx_data since this one is weird.
         trade_info = data[self.currency]['top_trade_info']
         our_robux = self.get_trade_remainder()
@@ -489,6 +500,14 @@ class RobuxTrader(Trader):
                 Trader.last_robux_rate = completed_trade.current_rate
             self.current_trade = None
 
+    def check_no_recent_trades(self):
+        """If the trader hasn't traded in a while, reset the last_tix_rate so the bot 
+        could possibly trade at a worse rate but gain in the long run."""
+        now = time.time()
+        if now - self.last_trade_time > reset_time:
+            self.last_trade_time = now
+            Trader.last_tix_rate = 0
+
     def do_trade(self):
         our_money = self.get_currency()
         if self.config['trade_all']:
@@ -500,6 +519,7 @@ class RobuxTrader(Trader):
         if amount > our_money:
             raise NoMoneyError
         self.check_bot_stopped()
+        self.check_no_recent_trades()
 
         to_trade, receive, rate = self.calculate_trade(amount)
         logging.debug("Actual rate: " + str(rate) + " " + str(to_trade) + " " +
