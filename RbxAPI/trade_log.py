@@ -39,6 +39,7 @@ class Trade(QObject):
         self.type2 = type2
         self.start_rate = rate
         self.current_rate = rate
+        self.seconds_time = time.time()
         self.start_time = datetime.datetime.now()
         self.complete_time = 'Incomplete'
         self.row = None  # The GUI display row
