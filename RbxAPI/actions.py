@@ -3,6 +3,7 @@ from lxml import html
 from .rbx_data import data
 from .errors import *
 from .trade_log import Trade
+from .utils import round_down, round_up, to_num, find_data_file
 
 import time
 import logging
@@ -15,7 +16,8 @@ LOGIN_URL = 'https://www.roblox.com/newlogin'
 TC_URL = 'http://www.roblox.com/My/Money.aspx#/#TradeCurrency_tab'
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>")
+    level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
+)
 # Disable For Debugging:
 logging.disable(logging.CRITICAL)
 
@@ -25,15 +27,7 @@ reset_time = 300 # Number of seconds the bot goes without trading before resetti
 
 # Initializing requests.Session for frozen application
 session = requests.Session()
-def find_data_file(filename):
-    if getattr(sys, 'frozen', False):
-        # The application is frozen
-        datadir = os.path.dirname(sys.executable)
-    else:
-        # The application is not frozen
-        datadir = os.path.dirname(os.path.abspath(__file__))
 
-    return os.path.join(datadir, filename)
 
 
 cacertpath = find_data_file('cacert.pem')
@@ -215,13 +209,14 @@ class TixTrader(Trader):
     holds_top_trade = False
     currency = 'Tickets'
     other_currency = 'Robux'
-    my_trader = TixTrader
-    other_trader = RobuxTrader
+   
 
     def __init__(self, trade_log):
         super().__init__(self.currency)
         self.trade_log = trade_log
-
+        self.my_trader = TixTrader
+        self.other_trader = RobuxTrader
+        
     def update_current_trade(self, amount_remain=None, top_rate=None):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
@@ -385,12 +380,13 @@ class RobuxTrader(Trader):
     holds_top_trade = False
     currency = 'Robux'
     other_currency = 'Tickets'
-    my_trader = RobuxTrader
-    other_trader = TixTrader
-    
+   
+
     def __init__(self, trade_log):
         super().__init__(self.currency)
         self.trade_log = trade_log
+        self.my_trader = RobuxTrader
+        self.other_trader = TixTrader
 
     def update_current_trade(self, amount_remain=None, top_rate=None):
         """If a current trade is active, update its information for the trade log."""
@@ -425,7 +421,7 @@ class RobuxTrader(Trader):
 
     @staticmethod
     def get_available_trade_info(trade_info):
-        """Parses the trade information string from the available tix column"""
+        """Parses the trade information string from the available robux column"""
         robux = to_num(get_raw_data(trade_info[0]))
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
         # Gets the 1:rate\r\n part
@@ -551,7 +547,6 @@ class RobuxTrader(Trader):
         self.trade_log.add_trade(new_trade)
 
 
-
 def get_tree():
     r = session.get(TC_URL)
     tree = html.fromstring(r.text)
@@ -572,19 +567,6 @@ def get_auth_tools():
     viewstate = tree.xpath('//input[@name="__VIEWSTATE"]')[0].attrib['value']
     eventvalidation = tree.xpath('//input[@name="__EVENTVALIDATION"]')[0].attrib['value']
     return viewstate, eventvalidation
-
-
-def round_down(num):
-    return math.floor(num*1000)/1000.0
-
-
-def round_up(num):
-    return math.ceil(num*1000)/1000.0
-
-
-def to_num(num):
-    return int(''.join([s for s in str(num) if s.isdigit()]))
-
 
 def test_login(user, pw):
     payload = {

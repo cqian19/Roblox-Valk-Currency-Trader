@@ -26,8 +26,8 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.trade_log = TradeLog()
         self.tix_trader = TixTrader(self.trade_log)
         self.robux_trader = RobuxTrader(self.trade_log)
-        self.tix_thread = self._assign_thread(self.tix_trader)
-        self.robux_thread = self._assign_thread(self.robux_trader)
+        self.tix_thread = self.assign_thread(self.tix_trader)
+        self.robux_thread = self.assign_thread(self.robux_trader)
 
         # Login screen
         self.usernameField.returnPressed.connect(self.login_pressed)
@@ -143,13 +143,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         table.insertItem(0, new_row)
         return new_row
 
-    def closeEvent(self, event):
-        """Builtin method executed when GUI is closed."""
-        if self.first_start:
-            self.stop_bots()
-        self.save_config()
-        print('Ending bot')
-
     def login_pressed(self):
         username = self.usernameField.text()
         pw = self.passwordField.text()
@@ -176,7 +169,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
             amount_box.setEnabled(True)
             trader.set_config('trade_all', False)
 
-    def _assign_thread(self, obj):
+    def assign_thread(self, obj):
         thread = QtCore.QThread()
         obj.moveToThread(thread)
         thread.started.connect(obj.start)
@@ -211,6 +204,14 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
             self.started = True
             button.setText('Stop')
             self.start_bots()
+
+    def closeEvent(self, event):
+        """Builtin method executed when GUI is closed."""
+        if self.first_start:
+            self.stop_bots()
+        self.save_config()
+        print('Ending bot')
+
 
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
