@@ -1,6 +1,7 @@
 """A file for misc. helper functions"""
 import sys
 import os
+import math
 
 def round_down(num):
     return math.floor(num*1000)/1000.0

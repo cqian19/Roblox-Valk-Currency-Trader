@@ -124,7 +124,7 @@ class Trader(QtCore.QObject):
         }
         if self.current_trade:
             self.update_current_trade()
-        self.current_trade = None
+            self.current_trade = None
         #Cancelling top trade ()
         vs, ev = get_auth_tools()
         payload['__EVENTVALIDATION'] = ev
@@ -141,19 +141,18 @@ class Trader(QtCore.QObject):
             raise BadSpreadError
         if this_rate <= 10 or other_rate <= 10:
             raise LowRateError
-        if spread > 0:
+        if spread >= 0:
             rate, expected_rate = this_rate, other_rate
         elif self.other_trader.holds_top_trade:
             # The spread is forcibly negative due to your split trade
             # In this case, get the second top rate of the other currency
-            print("I hold the top trade")
             rate = this_rate
             expected_rate = self.other_trader.get_available_trade_info(data[self.other_currency]['next_trade_info'])[1]
         else:
             rate = expected_rate = other_rate
         logging.info("Theory " + self.currency + " rate: " + str(rate) +
                      "\t" + "Low threshold: " + str(expected_rate))
-        return self.balance_rate(amount, rate, rate, expected_rate)
+        return self.balance_rate(amount, rate, expected_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         self.last_trade_time = time.time()
@@ -216,13 +215,24 @@ class TixTrader(Trader):
         self.trade_log = trade_log
         self.my_trader = TixTrader
         self.other_trader = RobuxTrader
-        
+
+    @staticmethod
+    def get_available_trade_info(trade_info):
+        """Parses the trade information string from the available tix column"""
+         # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
+        rate_split = [x for x in get_raw_data(trade_info).split(' ') if x and x[0].isdigit()]
+        # If the trader is @ Market
+        if len(rate_split) <= 1:
+            raise MarketTraderError
+        tix, all_rate = to_num(rate_split[0]), rate_split[1]
+        rate = float(all_rate.split(':')[0])
+        return tix, rate
+
     def update_current_trade(self, amount_remain=None, top_rate=None):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
         if amount_remain is None:
             amount_remain = self.get_trade_remainder()
-        print("Remainder FROM TIX: " + str(amount_remain))
         if amount_remain and self.current_trade:
             logging.info("TIX UPDATE amount_remain: " + str(amount_remain) + "")
             if amount_remain < self.current_trade.remaining1:
@@ -230,7 +240,6 @@ class TixTrader(Trader):
                 Trader.current_tix_rate = start_rate
                 Trader.last_tix_rate = max(start_rate, Trader.last_tix_rate)
                 self.current_trade.update(amount_remain, top_rate)
-                
         elif self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
 
@@ -246,18 +255,6 @@ class TixTrader(Trader):
             elif not self.last_robux_rate and not self.current_robux_rate:
                 if rate > self.get_other_rate():
                     self.cancel_trades()
-
-    @staticmethod
-    def get_available_trade_info(trade_info):
-        """Parses the trade information string from the available tix column"""
-         # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
-        rate_split = [x for x in get_raw_data(trade_info).split(' ') if x and x[0].isdigit()]
-        # If the trader is @ Market
-        if len(rate_split) <= 1:
-            raise MarketTraderError
-        tix, all_rate = to_num(rate_split[0]), rate_split[1]
-        rate = float(all_rate.split(':')[0])
-        return tix, rate
 
     def check_trade_gap(self):
         self.check_bot_stopped()
@@ -279,12 +276,11 @@ class TixTrader(Trader):
         
         # Check if the top trade is not our trade
         if our_tix and our_tix != top_tix:
+            print("Better tix rate exists", our_tix, top_tix)
             TixTrader.holds_top_trade = False
             if top_rate < self.last_robux_rate or self.current_robux_rate and top_rate < self.current_robux_rate:
-                self.cancel_trades()
                 return True
             elif not self.last_robux_rate and not self.current_robux_rate and top_rate < self.get_other_rate():
-                self.cancel_trades()
                 return True
         elif our_tix is not None:
             TixTrader.holds_top_trade = True
@@ -305,10 +301,10 @@ class TixTrader(Trader):
             if round_down(rate) > other_top_rate - .0015:
                 raise WorseRateError(self.currency, self.other_currency, rate, other_top_rate-.0015)
 
-    def balance_rate(self, amount, rate, this_top_rate, other_top_rate):
+    def balance_rate(self, amount, rate, other_top_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, this_top_rate, other_top_rate)
+        self.test_rate(rate, rate, other_top_rate)
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Add tolerance check
@@ -326,7 +322,7 @@ class TixTrader(Trader):
             x -= 1
         to_trade, receive = best_x, math.floor(best_x/rate)
         actual_rate = float(to_trade/receive)
-        self.test_rate(actual_rate, this_top_rate, other_top_rate)
+        self.test_rate(actual_rate, rate, other_top_rate)
         return to_trade, receive, actual_rate
 
     def fully_complete_trade(self):
@@ -349,27 +345,32 @@ class TixTrader(Trader):
 
     def do_trade(self):
         our_money = self.get_currency()
-        if self.config['trade_all']:
+        if self.current_trade: # If a trade is active, trade with the remaining amount
+            remainder = self.get_trade_remainder()
+            if self.config['trade_all']:
+                amount = our_money + remainder
+            else:
+                amount = min(our_money+remainder, self.config['amount'])
+        elif self.config['trade_all']:
             amount = our_money
         else:
             amount = min(self.config['amount'], our_money)
-        if not amount or amount > our_money:
-            raise NoMoneyError(self.currency)
+            if not amount or amount > our_money:
+                raise NoMoneyError(self.currency)
         # Especially if split trades are on, don't constantly trade small amounts
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
-        logging.debug("Actual rate: " + str(rate) + " " + str(to_trade) + " " +
-                      self.currency + "for " + str(receive) + " " + self.other_currency)
-
-        # Double check if trading has been stopped
         self.check_bot_stopped()
+        if self.check_trades():
+            self.cancel_trades()
+        if to_trade > self.get_currency():
+            raise NoMoneyError
         self.submit_trade(to_trade, receive)
 
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
         if Trader.last_tix_rate == 0:
             Trader.last_tix_rate = rate
         Trader.current_tix_rate = rate
-
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)
 
@@ -392,7 +393,6 @@ class RobuxTrader(Trader):
         """If a current trade is active, update its information for the trade log."""
         if amount_remain is None:
             amount_remain = self.get_trade_remainder()
-        print("Remainder FROM ROBUX: " + str(amount_remain))
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
                 start_rate = self.current_trade.start_rate 
@@ -402,8 +402,6 @@ class RobuxTrader(Trader):
                 else:
                     Trader.last_robux_rate = start_rate
                 self.current_trade.update(amount_remain, top_rate)
-                
-
         elif self.current_trade:
             self.fully_complete_trade()
 
@@ -454,12 +452,11 @@ class RobuxTrader(Trader):
         top_robux, top_rate = self.get_available_trade_info(trade_info)
         # Check if the top trade is not our trade
         if our_robux and our_robux != top_robux:
+            print("Better robux rate exists", our_robux, top_robux)
             RobuxTrader.holds_top_trade = False
             if self.last_tix_rate and top_rate > self.last_tix_rate or self.current_tix_rate and top_rate > self.current_tix_rate:
-                self.cancel_trades()
                 return True
             elif not self.last_tix_rate and not self.current_tix_rate and top_rate > self.get_other_rate():
-                self.cancel_trades()
                 return True
         elif our_robux is not None:
             RobuxTrader.holds_top_trade = True
@@ -467,6 +464,7 @@ class RobuxTrader(Trader):
         return False
 
     def test_rate(self, rate, this_top_rate, other_top_rate):
+        """Verifies that this is a better and profit making rate to trade at"""
         current_rate, last_rate = Trader.current_tix_rate, Trader.last_tix_rate
         print("Last tix rate:\t" + str(last_rate))
         if this_top_rate - rate > gap:
@@ -479,10 +477,10 @@ class RobuxTrader(Trader):
             if round_down(rate) < other_top_rate + .0015:
                 raise WorseRateError(self.currency, self.other_currency, rate, other_top_rate+.0015)
 
-    def balance_rate(self, amount, rate, this_top_rate, other_top_rate):
+    def balance_rate(self, amount, rate, other_top_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, this_top_rate, other_top_rate)
+        self.test_rate(rate, rate, other_top_rate)
         x, closest, best_x = amount, sys.maxsize, 0
         while x > self.get_tolerance(amount)*amount:
             diff = math.ceil(x*rate)/x - rate # Difference between top trade rate and actual rate
@@ -494,7 +492,7 @@ class RobuxTrader(Trader):
             x -= 1
         to_trade, receive = best_x, math.floor(best_x*rate)
         actual_rate = float(receive/to_trade)
-        self.test_rate(actual_rate, this_top_rate, other_top_rate)
+        self.test_rate(actual_rate, rate, other_top_rate)
         return to_trade, receive, actual_rate
 
     def fully_complete_trade(self):
@@ -520,29 +518,31 @@ class RobuxTrader(Trader):
 
     def do_trade(self):
         our_money = self.get_currency()
-        if self.config['trade_all']:
+        if self.current_trade: # If a trade is active, trade with the remaining amount
+            remainder = self.get_trade_remainder()
+            if self.config['trade_all']:
+                amount = our_money + remainder
+            else:
+                amount = min(our_money+remainder, self.config['amount'])
+        elif self.config['trade_all']:
             amount = our_money
         else:
             amount = min(self.config['amount'], our_money)
-        if not amount or amount > our_money:
-            raise NoMoneyError(self.currency)
-
+            if not amount or amount > our_money:
+                raise NoMoneyError(self.currency)
         self.check_bot_stopped()
-
         to_trade, receive, rate = self.calculate_trade(amount)
-        logging.debug("Actual rate: " + str(rate) + " " + str(to_trade) + " " +
-                      self.currency + "for " + str(receive) + " " + self.other_currency)
-
         self.check_bot_stopped()
+        if self.check_trades:
+            self.cancel_trades()
+        if to_trade > self.get_currency():
+            raise NoMoneyError(self.currency)
         self.submit_trade(to_trade, receive)
 
         new_trade = Trade(to_trade, receive, 'Robux', 'Tickets', rate)
-
         if Trader.last_robux_rate == 0:
-            print("Set robux rate")
             Trader.last_robux_rate = rate
         Trader.current_robux_rate = rate
-
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)
 
