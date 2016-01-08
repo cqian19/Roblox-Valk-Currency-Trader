@@ -21,8 +21,8 @@ logging.basicConfig(
 # Disable For Debugging:
 logging.disable(logging.CRITICAL)
 
-delay = .033  # Second delay between calculating trades.
-gap = .025 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
+delay = .15  # Second delay between calculating trades.
+gap = .015 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
@@ -89,7 +89,6 @@ class Trader(QtCore.QObject):
         return data
 
     def get_auth_tools(self):
-        self.refresh()
         # VIEWSTATE and EVENTVALIDATION must be from the same session
         viewstate = self.get_raw_data('//input[@name="__VIEWSTATE"]').attrib['value']
         eventvalidation = self.get_raw_data('//input[@name="__EVENTVALIDATION"]').attrib['value']
@@ -354,7 +353,7 @@ class TixTrader(Trader):
         """If the trader hasn't traded in a while, reset the last_robux_rate so the bot 
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
-        if now - self.last_trade_time > reset_time:
+        if now - self.last_trade_time > reset_time and not self.my_trader.holds_top_trade:
             print('No recent')
             self.last_trade_time = now
             Trader.last_robux_rate = 0
@@ -381,7 +380,7 @@ class TixTrader(Trader):
         if self.check_trades():
             self.cancel_trades()
         if to_trade > self.get_currency():
-            raise NoMoneyError
+            raise NoMoneyError(self.currency)
         self.submit_trade(to_trade, receive)
 
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
@@ -526,7 +525,7 @@ class RobuxTrader(Trader):
         """If the trader hasn't traded in a while, reset the last_tix_rate so the bot 
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
-        if now - self.last_trade_time > reset_time:
+        if now - self.last_trade_time > reset_time and not self.my_trader.holds_top_trade:
             print('No recent')
             self.last_trade_time = now
             Trader.last_tix_rate = 0

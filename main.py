@@ -9,7 +9,8 @@ import configparser
 import logging
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>")
+    level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
+)
 # For Debugging:
 # logging.disable(logging.CRITICAL)
 
