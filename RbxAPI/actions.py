@@ -26,12 +26,10 @@ gap = .025 # Maximum gap between our rate and next to top rate permitted (Lower 
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
-session = requests.Session()
-
-
-
 cacertpath = find_data_file('cacert.pem')
 os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
+session = requests.Session()
+
 
 class Trader(QtCore.QObject):
 
@@ -45,6 +43,7 @@ class Trader(QtCore.QObject):
         self.started = False
         self.currency = currency
         self._current_trade = None
+        self.last_tree = None
         self.last_trade_time = time.time()
         self.trade_payload = {
             data['give_type']: self.currency,
@@ -78,13 +77,31 @@ class Trader(QtCore.QObject):
         if self.started:
             self.cancel_trades()
 
+    def refresh(self):
+        r = session.get(TC_URL)
+        self.last_tree = html.fromstring(r.text)
+
+    def get_raw_data(self, d):
+        tree = self.last_tree
+        data = tree.xpath(d)
+        if len(data) == 1:
+            return data[0]
+        return data
+
+    def get_auth_tools(self):
+        self.refresh()
+        # VIEWSTATE and EVENTVALIDATION must be from the same session
+        viewstate = self.get_raw_data('//input[@name="__VIEWSTATE"]').attrib['value']
+        eventvalidation = self.get_raw_data('//input[@name="__EVENTVALIDATION"]').attrib['value']
+        return viewstate, eventvalidation
+
     def get_currency(self):
-        currency = get_raw_data(data[self.currency]['current'])
+        currency = self.get_raw_data(data[self.currency]['current'])
         amount = to_num(currency)
         return amount
 
     def get_rates(self):
-        rates = get_raw_data(data['rates'])
+        rates = self.get_raw_data(data['rates'])
         tix_rates, robux_rates = [s for s in rates.split('/')]
         return float(tix_rates), float(robux_rates)
 
@@ -100,7 +117,7 @@ class Trader(QtCore.QObject):
         return self.get_currency_rate(self.other_currency)
 
     def get_spread(self):
-        spread = get_raw_data(data['spread'])
+        spread = self.get_raw_data(data['spread'])
         return float(spread)
 
     def get_tolerance(self, amount):
@@ -110,13 +127,13 @@ class Trader(QtCore.QObject):
         return min(.9 + .025*math.floor(math.log(amount//10, 10)), .975)
 
     def get_trade_remainder(self):
-        rem_str = get_raw_data(data[self.currency]['trade_remainder'])
+        rem_str = self.get_raw_data(data[self.currency]['trade_remainder'])
         if rem_str:
             return to_num(rem_str)
 
     def check_trades(self):
         """Returns True if a trade is still active"""
-        return get_raw_data(data[self.currency]['trades']) == []
+        return self.get_raw_data(data[self.currency]['trades']) == []
             
     def cancel_trades(self):
         payload = {
@@ -126,7 +143,7 @@ class Trader(QtCore.QObject):
             self.update_current_trade()
             self.current_trade = None
         #Cancelling top trade ()
-        vs, ev = get_auth_tools()
+        vs, ev = self.get_auth_tools()
         payload['__EVENTVALIDATION'] = ev
         payload['__VIEWSTATE'] = vs
         session.post(TC_URL, data=payload)
@@ -147,7 +164,7 @@ class Trader(QtCore.QObject):
             # The spread is forcibly negative due to your split trade
             # In this case, get the second top rate of the other currency
             rate = this_rate
-            expected_rate = self.other_trader.get_available_trade_info(data[self.other_currency]['next_trade_info'])[1]
+            expected_rate = self.other_trader.get_available_trade_info(self, data[self.other_currency]['next_trade_info'])[1]
         else:
             rate = expected_rate = other_rate
         logging.info("Theory " + self.currency + " rate: " + str(rate) +
@@ -156,7 +173,7 @@ class Trader(QtCore.QObject):
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         self.last_trade_time = time.time()
-        vs, ev = get_auth_tools()
+        vs, ev = self.get_auth_tools()
         self.trade_payload[data['split_trades']] = self.config['split_trades']
         self.trade_payload[data['give_box']] = str(amount_to_give)
         self.trade_payload[data['receive_box']] = str(amount_to_receive)
@@ -172,6 +189,7 @@ class Trader(QtCore.QObject):
         self.started = True
         while self.started:
             time.sleep(delay)
+            self.refresh()
             try:
                 self.check_no_recent_trades()
                 if not self.check_trades():
@@ -216,11 +234,10 @@ class TixTrader(Trader):
         self.my_trader = TixTrader
         self.other_trader = RobuxTrader
 
-    @staticmethod
-    def get_available_trade_info(trade_info):
+    def get_available_trade_info(self, trade_info):
         """Parses the trade information string from the available tix column"""
          # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
-        rate_split = [x for x in get_raw_data(trade_info).split(' ') if x and x[0].isdigit()]
+        rate_split = [x for x in self.get_raw_data(trade_info).split(' ') if x and x[0].isdigit()]
         # If the trader is @ Market
         if len(rate_split) <= 1:
             raise MarketTraderError
@@ -417,13 +434,12 @@ class RobuxTrader(Trader):
                 if rate < self.get_other_rate():
                     self.cancel_trades()
 
-    @staticmethod
-    def get_available_trade_info(trade_info):
+    def get_available_trade_info(self, trade_info):
         """Parses the trade information string from the available robux column"""
-        robux = to_num(get_raw_data(trade_info[0]))
+        robux = to_num(self.get_raw_data(trade_info[0]))
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
         # Gets the 1:rate\r\n part
-        all_rate = [x for x in get_raw_data(trade_info[1])[1].split(' ') if x and x[0].isdigit()]
+        all_rate = [x for x in self.get_raw_data(trade_info[1])[1].split(' ') if x and x[0].isdigit()]
         # Check if the trade is @ Market
         if not all_rate:
             raise MarketTraderError
@@ -546,27 +562,6 @@ class RobuxTrader(Trader):
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)
 
-
-def get_tree():
-    r = session.get(TC_URL)
-    tree = html.fromstring(r.text)
-    return tree
-
-
-def get_raw_data(d):
-    tree = get_tree()
-    data = tree.xpath(d)
-    if len(data) == 1:
-        return data[0]
-    return data
-
-
-def get_auth_tools():
-    tree = get_tree()
-    # VIEWSTATE and EVENTVALIDATION must be from the same session
-    viewstate = tree.xpath('//input[@name="__VIEWSTATE"]')[0].attrib['value']
-    eventvalidation = tree.xpath('//input[@name="__EVENTVALIDATION"]')[0].attrib['value']
-    return viewstate, eventvalidation
 
 def test_login(user, pw):
     payload = {
