@@ -3,6 +3,7 @@
 from cx_Freeze import setup, Executable
 import requests
 import os 
+import sys
 
 includes = ['lxml.etree','lxml._elementpath']
 include_files = ['images/', 'guifiles/', 'config.ini', (requests.certs.where(),'cacert.pem')]
@@ -33,6 +34,7 @@ bdist_msi_options = dict(
     data=msi_data
 )
 
+
 buildOptions = dict(
     include_files=include_files,
     packages=packages,
@@ -40,18 +42,19 @@ buildOptions = dict(
     append_script_to_exe=True,
 )
 
+
 executables = [
     Executable(
         script='main.py',
         targetName='ValkTCBot.exe',
-        base="Win32GUI", # THIS ONE IS IMPORTANT FOR GUI APPLICATION
+        base='Win32GUI' if sys.platform=='win32' else None, # THIS ONE IS IMPORTANT FOR GUI APPLICATION
         icon='images/bot_desktop_icon.ico',
     )
 ]
 
 setup(
     name="Valk TC Bot",
-    version="1.0",
+    version="2.0",
     description="A trade currency bot for Roblox.",
     options=dict(build_exe=buildOptions,bdist_msi=bdist_msi_options),
     executables=executables
