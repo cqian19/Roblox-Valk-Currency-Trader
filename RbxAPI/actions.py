@@ -101,7 +101,7 @@ class Trader(QtCore.QObject):
 
     def get_rates(self):
         rates = self.get_raw_data(data['rates'])
-        tix_rates, robux_rates = [s for s in rates.split('/')]
+        tix_rates, robux_rates = rates.split('/')
         return float(tix_rates), float(robux_rates)
 
     def get_currency_rate(self, currency=None):
@@ -152,23 +152,28 @@ class Trader(QtCore.QObject):
             Trader.current_robux_rate = 0
 
     def calculate_trade(self, amount):
-        spread, this_rate, other_rate = self.get_spread(), self.get_currency_rate(), self.get_other_rate()
+        """Determines which rate to match."""
+        spread, this_top_rate, other_top_rate = self.get_spread(), self.get_currency_rate(), self.get_other_rate()
+        top_rate = 0
         if spread > 10000 or spread < -10000:
             raise BadSpreadError
-        if this_rate <= 10 or other_rate <= 10:
+        if this_top_rate <= 10 or other_top_rate <= 10:
             raise LowRateError
         if spread >= 0:
-            rate, expected_rate = this_rate, other_rate
+            rate = this_top_rate
+            other_threshold_rate = other_top_rate
         elif self.other_trader.holds_top_trade:
             # The spread is forcibly negative due to your split trade
-            # In this case, get the second top rate of the other currency
-            rate = this_rate
-            expected_rate = self.other_trader.get_available_trade_info(self, data[self.other_currency]['next_trade_info'])[1]
+            # In this case, get the second highest trade rate of the other currency.
+            rate = this_top_rate
+            other_threshold_rate = self.other_trader.get_available_trade_info(self, data[self.other_currency]['next_trade_info'])[1]
+            print("I hold the top trade", rate , other_threshold_rate)
         else:
-            rate = expected_rate = other_rate
-        logging.info("Theory " + self.currency + " rate: " + str(rate) +
-                     "\t" + "Low threshold: " + str(expected_rate))
-        return self.balance_rate(amount, rate, expected_rate)
+            # Otherwise get the second best trade in this category.
+            rate = self.get_available_trade_info(data[self.currency]['next_trade_info'])[1]
+            other_threshold_rate = other_top_rate
+            print("I don't hold the top trade", rate)
+        return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         self.last_trade_time = time.time()
@@ -188,8 +193,8 @@ class Trader(QtCore.QObject):
         self.started = True
         while self.started:
             time.sleep(delay)
-            self.refresh()
             try:
+                self.refresh()
                 self.check_no_recent_trades()
                 if not self.check_trades():
                     if self.current_trade: # BUG: Post requests may not register yet on Roblox's server
@@ -292,7 +297,7 @@ class TixTrader(Trader):
         
         # Check if the top trade is not our trade
         if our_tix and our_tix != top_tix:
-            print("Better tix rate exists", our_tix, top_tix)
+            self.update_current_trade(our_tix) # Update the remaining tix first
             TixTrader.holds_top_trade = False
             if top_rate < self.last_robux_rate or self.current_robux_rate and top_rate < self.current_robux_rate:
                 return True
@@ -303,24 +308,23 @@ class TixTrader(Trader):
             self.update_current_trade(our_tix, top_rate)
         return False
 
-    def test_rate(self, rate, this_top_rate, other_top_rate):
+    def test_rate(self, rate, this_top_rate, threshold_rate):
         """Tests if the rate is better than the last rate"""
         current_rate, last_rate = Trader.current_robux_rate, Trader.last_robux_rate
-        print("Last robux rate:\t" + str(last_rate))
         if rate - this_top_rate > gap:
             raise TradeGapError
         if last_rate and rate >= last_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
-            if not other_top_rate:
+            if not threshold_rate:
                 raise BadSpreadError
-            if round_down(rate) > other_top_rate - .0015:
-                raise WorseRateError(self.currency, self.other_currency, rate, other_top_rate-.0015)
+            if round_down(rate) > threshold_rate - .0015:
+                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate-.0015)
 
-    def balance_rate(self, amount, rate, other_top_rate):
+    def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, rate, other_top_rate)
+        self.test_rate(rate, this_top_rate, threshold_rate)
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Add tolerance check
@@ -330,15 +334,13 @@ class TixTrader(Trader):
                 if diff > closest_within_rate:
                     closest_within_rate = diff
                     best_x = x
-                if diff > .0008:
-                    break
             elif not closest_within_rate and diff < closest_outside_rate: # diff >= .001
                 closest_outside_rate = diff
                 best_x = x
             x -= 1
         to_trade, receive = best_x, math.floor(best_x/rate)
-        actual_rate = float(to_trade/receive)
-        self.test_rate(actual_rate, rate, other_top_rate)
+        actual_rate = to_trade/receive
+        self.test_rate(actual_rate, this_top_rate, threshold_rate)
         return to_trade, receive, actual_rate
 
     def fully_complete_trade(self):
@@ -353,11 +355,14 @@ class TixTrader(Trader):
         """If the trader hasn't traded in a while, reset the last_robux_rate so the bot 
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
-        if now - self.last_trade_time > reset_time and not self.my_trader.holds_top_trade:
-            print('No recent')
-            self.last_trade_time = now
-            Trader.last_robux_rate = 0
-            self.cancel_trades()
+        if now - self.last_trade_time > reset_time:
+            if not self.my_trader.holds_top_trade:
+                print('No recent')
+                self.last_trade_time = now
+                Trader.last_robux_rate = 0
+                self.cancel_trades()
+            else: # Extend the time
+                self.last_trade_time = now
 
     def do_trade(self):
         our_money = self.get_currency()
@@ -467,7 +472,7 @@ class RobuxTrader(Trader):
         top_robux, top_rate = self.get_available_trade_info(trade_info)
         # Check if the top trade is not our trade
         if our_robux and our_robux != top_robux:
-            print("Better robux rate exists", our_robux, top_robux)
+            self.update_current_trade(our_robux)
             RobuxTrader.holds_top_trade = False
             if self.last_tix_rate and top_rate > self.last_tix_rate or self.current_tix_rate and top_rate > self.current_tix_rate:
                 return True
@@ -478,36 +483,33 @@ class RobuxTrader(Trader):
             self.update_current_trade(our_robux, top_rate)
         return False
 
-    def test_rate(self, rate, this_top_rate, other_top_rate):
+    def test_rate(self, rate, this_top_rate, threshold_rate):
         """Verifies that this is a better and profit making rate to trade at"""
         current_rate, last_rate = Trader.current_tix_rate, Trader.last_tix_rate
-        print("Last tix rate:\t" + str(last_rate))
         if this_top_rate - rate > gap:
             raise TradeGapError
         if last_rate and rate <= last_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
-            if not other_top_rate:
+            if not threshold_rate:
                 raise BadSpreadError
-            if round_down(rate) < other_top_rate + .0015:
-                raise WorseRateError(self.currency, self.other_currency, rate, other_top_rate+.0015)
+            if round_down(rate) < threshold_rate + .0015:
+                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate+.0015)
 
-    def balance_rate(self, amount, rate, other_top_rate):
+    def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, rate, other_top_rate)
+        self.test_rate(rate, this_top_rate, threshold_rate)
         x, closest, best_x = amount, sys.maxsize, 0
         while x > self.get_tolerance(amount)*amount:
             diff = math.ceil(x*rate)/x - rate # Difference between top trade rate and actual rate
             if diff < closest and diff >= 0:
                 closest = diff
                 best_x = x
-                if diff <= .0002: #  Trade rate is close
-                    break
             x -= 1
         to_trade, receive = best_x, math.floor(best_x*rate)
-        actual_rate = float(receive/to_trade)
-        self.test_rate(actual_rate, rate, other_top_rate)
+        actual_rate = receive/to_trade
+        self.test_rate(actual_rate, this_top_rate, threshold_rate)
         return to_trade, receive, actual_rate
 
     def fully_complete_trade(self):
@@ -525,11 +527,14 @@ class RobuxTrader(Trader):
         """If the trader hasn't traded in a while, reset the last_tix_rate so the bot 
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
-        if now - self.last_trade_time > reset_time and not self.my_trader.holds_top_trade:
-            print('No recent')
-            self.last_trade_time = now
-            Trader.last_tix_rate = 0
-            self.cancel_trades()
+        if now - self.last_trade_time > reset_time:
+            if not self.my_trader.holds_top_trade:
+                print('No recent')
+                self.last_trade_time = now
+                Trader.last_tix_rate = 0
+                self.cancel_trades()
+            else:
+                self.last_trade_time = now
 
     def do_trade(self):
         our_money = self.get_currency()

@@ -52,6 +52,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         # Trade Log
         self.trade_log.trade_added.connect(self.on_trade_added)
         self.trade_log.trade_completed.connect(self.on_trade_completed)
+        print("Starting bot")
 
     def initialize_config(self):
         config = configparser.ConfigParser()
@@ -97,7 +98,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
     def on_trade_updated(self, trade):
         tup = (trade.remaining1, abbr[trade.type1], round_down(trade.current_rate))
         text = "{} {} @ {:.3f}".format(*tup)
-        print('TRADE UPDATED', text)
         row = trade.row
         if row:
             row.setText(text)
@@ -177,6 +177,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         return thread
 
     def start_bots(self):
+        print("Starting bot trading")
         self.tix_thread.start()
         self.robux_thread.start()
 
@@ -185,6 +186,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         thread.wait()
 
     def stop_bots(self):
+        print("Stopping bot trading")
         self.tix_trader.stop()
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
