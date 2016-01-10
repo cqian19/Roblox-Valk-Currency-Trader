@@ -40,6 +40,7 @@ buildOptions = dict(
     packages=packages,
     includes=includes,
     append_script_to_exe=True,
+    include_msvcr=True
 )
 
 
