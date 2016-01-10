@@ -20,7 +20,7 @@ logging.basicConfig(
 # Disable For Debugging:
 logging.disable(logging.CRITICAL)
 
-delay = .15  # Second delay between calculating trades.
+delay = .175  # Second delay between calculating trades.
 gap = .015 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
@@ -196,7 +196,7 @@ class Trader(QtCore.QObject):
                 print('No recent')
                 self.last_trade_time = now
                 rates.last_tix_rate = 0
-                rates.last_robux_rate
+                rates.last_robux_rate = 0
                 self.cancel_trades()
             else:
                 self.last_trade_time = now
