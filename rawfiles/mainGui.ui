@@ -38,11 +38,11 @@
     <normaloff>:/images/bot_icon.png</normaloff>:/images/bot_icon.png</iconset>
   </property>
   <property name="windowOpacity">
-   <double>0.000000000000000</double>
+   <double>1.000000000000000</double>
   </property>
   <property name="styleSheet">
-   <string notr="true">QMainWindow {
-	background-color: white;
+   <string notr="true">QMainWindow{
+	background-color:rgb(240, 240, 240);
 }</string>
   </property>
   <property name="iconSize">
@@ -64,11 +64,10 @@
       <height>391</height>
      </rect>
     </property>
-    <property name="autoFillBackground">
-     <bool>true</bool>
-    </property>
     <property name="styleSheet">
-     <string notr="true"/>
+     <string notr="true">#page_3,#page_4{
+	background-color:rgb(240, 240, 240);
+}</string>
     </property>
     <property name="currentIndex">
      <number>0</number>
@@ -424,6 +423,7 @@ QTabBar::tab:selected, QTabBar::tab:hover {
      border: 2px solid gray; 
      border-radius: 13px; 
 	 border-width: 3px;
+	 background-color: rgb(240, 240, 240);
  } </string>
         </property>
         <property name="title">

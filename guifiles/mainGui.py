@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'mainGui.ui'
 #
-# Created: Fri Jan  1 16:57:52 2016
+# Created: Sun Jan 10 12:56:28 2016
 #      by: pyside-uic 0.2.15 running on PySide 1.2.2
 #
 # WARNING! All changes made in this file will be lost!
@@ -25,12 +25,18 @@ class Ui_MainWindow(object):
         icon.addPixmap(QtGui.QPixmap(":/images/bot_icon.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
         MainWindow.setWindowOpacity(1.0)
+        MainWindow.setStyleSheet("QMainWindow{\n"
+"    background-color:rgb(240, 240, 240);\n"
+"}")
         MainWindow.setIconSize(QtCore.QSize(1, 1))
         self.centralwidget = QtGui.QWidget(MainWindow)
         self.centralwidget.setLayoutDirection(QtCore.Qt.LeftToRight)
         self.centralwidget.setObjectName("centralwidget")
         self.stackedWidget = QtGui.QStackedWidget(self.centralwidget)
         self.stackedWidget.setGeometry(QtCore.QRect(0, 20, 641, 391))
+        self.stackedWidget.setStyleSheet("#page_3,#page_4{\n"
+"    background-color:rgb(240, 240, 240);\n"
+"}")
         self.stackedWidget.setObjectName("stackedWidget")
         self.page_3 = QtGui.QWidget()
         self.page_3.setObjectName("page_3")
@@ -223,6 +229,7 @@ class Ui_MainWindow(object):
 "     border: 2px solid gray; \n"
 "     border-radius: 13px; \n"
 "     border-width: 3px;\n"
+"     background-color: rgb(240, 240, 240);\n"
 " } ")
         self.groupBox.setTitle("")
         self.groupBox.setObjectName("groupBox")
@@ -460,6 +467,8 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
 
         self.retranslateUi(MainWindow)
+        self.stackedWidget.setCurrentIndex(0)
+        self.tabWidget_2.setCurrentIndex(0)
         self.currentTradeTable.setCurrentRow(-1)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
