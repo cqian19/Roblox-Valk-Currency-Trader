@@ -110,8 +110,8 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
             current.takeItem(current.row(gui_row))
 
         amount_traded = trade.amount1 - trade.remaining1
-        print('Amount traded: ' + str(amount_traded))
         text = ""
+        print(trade)
         if amount_traded == trade.amount1:  # Trade is fully completed
             tup = (amount_traded, abbr[trade.type1],
                    round_down(trade.start_rate), trade.amount2, abbr[trade.type2])

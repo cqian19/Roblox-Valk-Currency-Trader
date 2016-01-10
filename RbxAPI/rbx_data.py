@@ -1,3 +1,6 @@
+LOGIN_URL = 'https://www.roblox.com/newlogin'
+TC_URL = 'http://www.roblox.com/My/Money.aspx#/#TradeCurrency_tab'
+
 data = {
     'Tickets': {
         'current': '//*[@id="nav-tix-balance"]/text()',
