@@ -393,6 +393,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         if self.check_trades():
             self.cancel_trades()
+            self.refresh()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency)
 
@@ -555,6 +556,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         if self.check_trades:
             self.cancel_trades()
+            self.refresh()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency)
 

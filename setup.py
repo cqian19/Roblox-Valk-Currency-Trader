@@ -5,9 +5,9 @@ import requests
 import os 
 import sys
 
-includes = ['lxml.etree','lxml._elementpath']
-include_files = ['images/', 'guifiles/', 'config.ini', (requests.certs.where(),'cacert.pem')]
-packages = ['inspect', 'os', 'requests', 'PySide.QtCore', 'PySide.QtGui', 'RbxAPI', ]
+includes = ['atexit', 'lxml.etree','lxml._elementpath']
+include_files = ['images/', 'guifiles/', 'config.ini', (requests.certs.where(),'cacert.pem'), 'C:\Windows\System32\msvcp100.dll']
+packages = ['sys', 'inspect', 'os', 'requests', 'PySide.QtGui', 'PySide.QtCore']
 
 shortcut_table = [
     ("DesktopShortcut",        # Shortcut
@@ -30,6 +30,7 @@ msi_data = dict(
 )
 
 bdist_msi_options = dict(
+    add_to_path=True,
     initial_target_dir='C:\ValkTCBot',
     data=msi_data
 )
@@ -40,7 +41,7 @@ buildOptions = dict(
     packages=packages,
     includes=includes,
     append_script_to_exe=True,
-    include_msvcr=True
+    include_msvcr=True,
 )
 
 
@@ -48,7 +49,7 @@ executables = [
     Executable(
         script='main.py',
         targetName='ValkTCBot.exe',
-        base='Win32GUI' if sys.platform=='win32' else None, # THIS ONE IS IMPORTANT FOR GUI APPLICATION
+        base='Win32GUI', #if sys.platform=='win32' else None, # THIS ONE IS IMPORTANT FOR GUI APPLICATION
         icon='images/bot_desktop_icon.ico',
     )
 ]

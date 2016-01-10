@@ -1,12 +1,13 @@
+
 from PySide import QtCore, QtGui
 from functools import partial
 from RbxAPI import *
 
 import guifiles.mainGui as gui
 
-import sys
 import configparser
 import logging
+import sys
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
@@ -217,6 +218,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
 
 if __name__ == '__main__':
+    QtGui.QApplication.setDesktopSettingsAware(False)
     app = QtGui.QApplication(sys.argv)
     form = MainDialog()
     form.show()

@@ -38,7 +38,12 @@
     <normaloff>:/images/bot_icon.png</normaloff>:/images/bot_icon.png</iconset>
   </property>
   <property name="windowOpacity">
-   <double>1.000000000000000</double>
+   <double>0.000000000000000</double>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QMainWindow {
+	background-color: white;
+}</string>
   </property>
   <property name="iconSize">
    <size>
@@ -58,6 +63,12 @@
       <width>641</width>
       <height>391</height>
      </rect>
+    </property>
+    <property name="autoFillBackground">
+     <bool>true</bool>
+    </property>
+    <property name="styleSheet">
+     <string notr="true"/>
     </property>
     <property name="currentIndex">
      <number>0</number>
