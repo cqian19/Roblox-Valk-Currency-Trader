@@ -57,7 +57,7 @@ executables = [
 setup(
     name="Valk TC Bot",
     version="2.0",
-    description="A trade currency bot for Roblox.",
+    description="Trade Currency Bot",
     options=dict(build_exe=buildOptions,bdist_msi=bdist_msi_options),
     executables=executables
 )

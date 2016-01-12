@@ -12,16 +12,14 @@ import requests
 import os
 import sys
 
-
-
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
 )
 # Disable For Debugging:
 logging.disable(logging.CRITICAL)
 
-delay = .175  # Second delay between calculating trades.
-gap = .015 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
+delay = .125  # Second delay between calculating trades.
+gap = .01 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
@@ -153,6 +151,22 @@ class Trader(QtCore.QObject):
             rates.current_tix_rate = 0
         else:
             rates.current_robux_rate = 0
+
+    def get_amount_to_trade(self):
+        our_money = self.get_currency()
+        if self.current_trade: # If a trade is active, trade with the remaining amount
+            remainder = self.get_trade_remainder()
+            if self.config['trade_all']:
+                amount = our_money + remainder
+            else:
+                amount = min(our_money+remainder, self.config['amount'])
+        elif self.config['trade_all']:
+            amount = our_money
+        else:
+            amount = min(self.config['amount'], our_money)
+            if not amount or amount > our_money:
+                raise NoMoneyError(self.currency)
+        return amount
 
     def calculate_trade(self, amount):
         """Determines which rate to match."""
@@ -298,7 +312,7 @@ class TixTrader(Trader):
 
     def check_trade_gap(self):
         self.check_bot_stopped()
-        if self.current_trade and self.current_trade.amount1 == self.current_trade.remaining1:
+        if self.current_trade and self.holds_top_trade and self.current_trade.amount1 == self.current_trade.remaining1:
             trade_info = data[self.currency]['next_trade_info']
             next_tix, next_rate = self.get_available_trade_info(trade_info)
             diff = self.current_trade.current_rate - next_rate
@@ -367,27 +381,14 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade:
+        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
-            rates.current_tix_rate = 0
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
-            self.current_trade = None
+        rates.current_tix_rate = 0
+        self.current_trade = None
 
     def do_trade(self):
-        our_money = self.get_currency()
-        if self.current_trade: # If a trade is active, trade with the remaining amount
-            remainder = self.get_trade_remainder()
-            if self.config['trade_all']:
-                amount = our_money + remainder
-            else:
-                amount = min(our_money+remainder, self.config['amount'])
-        elif self.config['trade_all']:
-            amount = our_money
-        else:
-            amount = min(self.config['amount'], our_money)
-            if not amount or amount > our_money:
-                raise NoMoneyError(self.currency)
-        # Especially if split trades are on, don't constantly trade small amounts
+        amount = self.get_amount_to_trade()
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
@@ -395,8 +396,9 @@ class TixTrader(Trader):
             self.cancel_trades()
             self.refresh()
         if to_trade > self.get_currency():
-            raise NoMoneyError(self.currency)
-
+            self.do_trade() # Redo trade
+            return
+        self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 
         rates.current_tix_rate = rate
@@ -466,7 +468,7 @@ class RobuxTrader(Trader):
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
         self.check_bot_stopped()
-        if self.current_trade and self.current_trade.amount1 == self.current_trade.remaining1:
+        if self.current_trade and self.holds_top_trade and self.current_trade.amount1 == self.current_trade.remaining1:
             # Get the second highest trade's info
             trade_info = data[self.currency]['next_trade_info']
             next_robux, next_rate = self.get_available_trade_info(trade_info)
@@ -528,29 +530,17 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade: # Trade has been fully completed?
+        if completed_trade and time.time() - self.last_trade_time > 1: # Trade has been fully completed?
             completed_trade.update(0)
-            rates.current_robux_rate = 0
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
             else:
                 rates.last_robux_rate = completed_trade.start_rate
-            self.current_trade = None
+        rates.current_robux_rate = 0
+        self.current_trade = None
 
     def do_trade(self):
-        our_money = self.get_currency()
-        if self.current_trade: # If a trade is active, trade with the remaining amount
-            remainder = self.get_trade_remainder()
-            if self.config['trade_all']:
-                amount = our_money + remainder
-            else:
-                amount = min(our_money+remainder, self.config['amount'])
-        elif self.config['trade_all']:
-            amount = our_money
-        else:
-            amount = min(self.config['amount'], our_money)
-            if not amount or amount > our_money:
-                raise NoMoneyError(self.currency)
+        amount = self.get_amount_to_trade()
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
@@ -558,8 +548,9 @@ class RobuxTrader(Trader):
             self.cancel_trades()
             self.refresh()
         if to_trade > self.get_currency():
-            raise NoMoneyError(self.currency)
-
+            self.do_trade() # Redo trade
+            return
+        self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 
         rates.current_robux_rate = rate
