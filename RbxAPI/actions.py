@@ -15,7 +15,7 @@ import sys
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
 )
-# Disable For Debugging:
+# Enable For Debugging:
 logging.disable(logging.CRITICAL)
 
 delay = .125  # Second delay between calculating trades.
@@ -381,7 +381,7 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_time > 1.25: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
         rates.current_tix_rate = 0
@@ -394,10 +394,11 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         if self.check_trades():
             self.cancel_trades()
-            self.refresh()
         if to_trade > self.get_currency():
+            self.refresh()
             self.do_trade() # Redo trade
             return
+        
         self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 
@@ -530,7 +531,7 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1: # Trade has been fully completed?
+        if completed_trade and time.time() - self.last_trade_time > 1.25: # Trade has been fully completed?
             completed_trade.update(0)
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
@@ -544,10 +545,10 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades:
+        if self.check_trades():
             self.cancel_trades()
-            self.refresh()
         if to_trade > self.get_currency():
+            self.refresh()
             self.do_trade() # Redo trade
             return
         self.check_bot_stopped()
