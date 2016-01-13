@@ -152,22 +152,6 @@ class Trader(QtCore.QObject):
         else:
             rates.current_robux_rate = 0
 
-    def get_amount_to_trade(self):
-        our_money = self.get_currency()
-        if self.check_trades(): # If a trade is active, trade with the remaining amount
-            remainder = self.get_trade_remainder()
-            if self.config['trade_all']:
-                amount = our_money + remainder
-            else:
-                amount = min(our_money+remainder, self.config['amount'])
-        elif self.config['trade_all']:
-            amount = our_money
-        else:
-            amount = min(self.config['amount'], our_money)
-            if not amount or amount > our_money:
-                raise NoMoneyError(self.currency)
-        return amount
-
     def get_top_trade_info(self):
         """Returns the currency amount and rate of the top available trade in this currency"""
         return self.get_available_trade_info(data[self.currency]['top_trade_info'])
@@ -183,6 +167,20 @@ class Trader(QtCore.QObject):
     def get_other_next_rate(self):
         """Returns the rate of the second top trade in the category of the other currency"""
         return self.other_trader.get_available_trade_info(self, data[self.other_currency]['next_trade_info'])[1]
+
+    def get_amount_to_trade(self):
+        our_money = self.get_currency()
+        if self.config['trade_all']:
+            if self.check_trades():
+                remainder = self.get_trade_remainder()
+                amount = our_money + remainder
+            else:
+                amount = our_money
+        else:
+            amount = self.config['amount']
+            if not amount or amount > our_money:
+                raise NoMoneyError(self.currency)
+        return amount
 
     def calculate_trade(self, amount):
         """Determines which rate to match."""
