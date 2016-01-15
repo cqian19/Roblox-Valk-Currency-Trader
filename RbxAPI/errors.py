@@ -75,3 +75,11 @@ class MarketTraderError(Exception):
 
     def __str__(self):
         return self.msg
+
+class ConnectionResetError(Exception):
+
+    """Raised when item is None due to connection forcibly being closed."""
+    msg = "Possible connection reset."
+
+    def __str__(self):
+        return self.msg

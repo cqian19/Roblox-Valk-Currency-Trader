@@ -295,7 +295,10 @@ class TixTrader(Trader):
     def get_available_trade_info(self, trade_info):
         """Parses the trade information string from the available tix column"""
          # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
-        rate_split = [x for x in self.get_raw_data(trade_info).split(' ') if x and x[0].isdigit()]
+        info = self.get_raw_data(trade_info) # May be None if connection is reset
+        if not info:
+            raise requests.exceptions.ConnectionError
+        rate_split = [x for x in info.split(' ') if x and x[0].isdigit()]
         # If the trader is @ Market
         if len(rate_split) <= 1:
             raise MarketTraderError
@@ -480,8 +483,11 @@ class RobuxTrader(Trader):
         """Parses the trade information string from the available robux column"""
         robux = to_num(self.get_raw_data(trade_info[0]))
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
+        info = self.get_raw_data(trade_info[1])
+        if not info:
+            raise requests.exceptions.ConnectionError
         # Gets the 1:rate\r\n part
-        all_rate = [x for x in self.get_raw_data(trade_info[1])[1].split(' ') if x and x[0].isdigit()]
+        all_rate = [x for x in info[1].split(' ') if x and x[0].isdigit()]
         # Check if the trade is @ Market
         if not all_rate:
             raise MarketTraderError
