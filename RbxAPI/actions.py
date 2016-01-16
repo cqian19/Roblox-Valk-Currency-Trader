@@ -389,7 +389,8 @@ class TixTrader(Trader):
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Add tolerance check
-        while x > self.get_tolerance(amount)*amount:
+        tolerance = self.get_tolerance(amount)# Lowest % to trade
+        while x > tolerance*amount:
             diff = x/math.floor(x/rate) - rate # Difference between our actual rate and top tix rate.
             if diff < .001:
                 if diff > closest_within_rate:
@@ -406,7 +407,7 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1.25: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_time > 1.5: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
             rates.current_tix_rate = 0
@@ -419,7 +420,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades():
+        if self.check_trades() or self.current_trade: # Trade may not be detected due to server delay
             self.cancel_trades()
         if to_trade > self.get_currency():
             self.refresh()
@@ -481,13 +482,14 @@ class RobuxTrader(Trader):
 
     def get_available_trade_info(self, trade_info):
         """Parses the trade information string from the available robux column"""
-        robux = to_num(self.get_raw_data(trade_info[0]))
+        amount_info = self.get_raw_data(trade_info[0])
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
-        info = self.get_raw_data(trade_info[1])
-        if not info:
+        rate_info = self.get_raw_data(trade_info[1])
+        if not amount_info or not rate_info:
             raise requests.exceptions.ConnectionError
+        robux = to_num(amount_info)
         # Gets the 1:rate\r\n part
-        all_rate = [x for x in info[1].split(' ') if x and x[0].isdigit()]
+        all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
         # Check if the trade is @ Market
         if not all_rate:
             raise MarketTraderError
@@ -550,7 +552,8 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         self.test_rate(rate, this_top_rate, threshold_rate)
         x, closest, best_x = amount, sys.maxsize, 0
-        while x > self.get_tolerance(amount)*amount:
+        tolerance = self.get_tolerance(amount)
+        while x > tolerance*amount:
             diff = math.ceil(x*rate)/x - rate # Difference between top trade rate and actual rate
             if diff < closest and diff >= 0:
                 closest = diff
@@ -563,7 +566,7 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1.25: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_time > 1.5: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
@@ -579,7 +582,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades():
+        if self.check_trades() or self.current_trade:
             self.cancel_trades()
         if to_trade > self.get_currency():
             self.refresh()
