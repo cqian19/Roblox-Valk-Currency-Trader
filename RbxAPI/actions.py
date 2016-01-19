@@ -12,13 +12,15 @@ import requests
 import os
 import sys
 
+from requests.packages.urllib3.util import Retry
+
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
 )
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .1  # Second delay between calculating trades.
+delay = .125  # Second delay between calculating trades.
 gap = .01 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
@@ -26,8 +28,8 @@ reset_time = 300 # Number of seconds the bot goes without trading before resetti
 cacertpath = find_data_file('cacert.pem')
 os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
 session = requests.Session()
-session.mount("http://", requests.adapters.HTTPAdapter(max_retries=1))
-session.mount("https://", requests.adapters.HTTPAdapter(max_retries=1))
+session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=10,backoff_factor=.5)))
+session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=10,backoff_factor=.5)))
 # Storing variables since they can't be stored in QObject
 class RateHandler():
     last_tix_rate = 0.0
@@ -81,6 +83,7 @@ class Trader(QtCore.QObject):
     def refresh(self):
         r = session.get(TC_URL)
         self.last_tree = html.fromstring(r.text)
+
 
     def get_raw_data(self, d):
         tree = self.last_tree
@@ -343,8 +346,8 @@ class TixTrader(Trader):
                 if diff > gap:
                     logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                     self.cancel_trades()
-            elif self.current_trade.amount1 > .975*self.current_trade.remaining1:
-                if diff > .15:
+            elif self.current_trade.remaining1 > .98*self.current_trade.amount1:
+                if diff > .05:
                     self.cancel_trades()
 
     def check_better_rate(self):
@@ -420,7 +423,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades() or self.current_trade: # Trade may not be detected due to server delay
+        if self.check_trades(): # Trade may not be detected due to server delay
             self.cancel_trades()
         if to_trade > self.get_currency():
             self.refresh()
@@ -509,8 +512,8 @@ class RobuxTrader(Trader):
                 if diff > gap:
                     logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
                     self.cancel_trades()
-            elif self.current_trade.amount1 >= .975*self.current_trade.remaining1:
-                if diff > .15:
+            elif self.current_trade.remaining1 >= .98*self.current_trade.amount1:
+                if diff > .05:
                     self.cancel_trades()
 
     def check_better_rate(self):
@@ -582,7 +585,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades() or self.current_trade:
+        if self.check_trades():
             self.cancel_trades()
         if to_trade > self.get_currency():
             self.refresh()
