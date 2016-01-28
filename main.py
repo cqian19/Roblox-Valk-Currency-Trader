@@ -1,4 +1,3 @@
-
 from PySide import QtCore, QtGui
 from functools import partial
 from RbxAPI import *

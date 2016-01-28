@@ -17,10 +17,11 @@ from requests.packages.urllib3.util import Retry
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
 )
+
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .125  # Second delay between calculating trades.
+delay = .1  # Second delay between calculating trades.
 gap = .01 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
@@ -28,8 +29,8 @@ reset_time = 300 # Number of seconds the bot goes without trading before resetti
 cacertpath = find_data_file('cacert.pem')
 os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
 session = requests.Session()
-session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=10,backoff_factor=.5)))
-session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=10,backoff_factor=.5)))
+session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,backoff_factor=.3)))
+session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,backoff_factor=.3)))
 # Storing variables since they can't be stored in QObject
 class RateHandler():
     last_tix_rate = 0.0
@@ -133,6 +134,7 @@ class Trader(QtCore.QObject):
         rem_str = self.get_raw_data(data[self.currency]['trade_remainder'])
         if rem_str:
             return to_num(rem_str)
+        return 0
 
     def check_trades(self):
         """Returns True if a trade is still active"""
@@ -181,7 +183,7 @@ class Trader(QtCore.QObject):
                 amount = our_money
         else:
             amount = self.config['amount']
-            if not amount or amount > our_money:
+            if not amount or amount > self.get_currency():
                 raise NoMoneyError(self.currency)
         return amount
 
@@ -262,22 +264,24 @@ class Trader(QtCore.QObject):
                 else:
                     self.cancel_trades()
             except BotStoppedError:
+                self.cancel_trades()
                 break
             except requests.exceptions.ConnectionError as e:
                 print(e)
                 print("Connection interrupted")
-            except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError, TradeGapError) as e:
+            except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError, TradeGapError, NoMoneyError) as e:
                 logging.debug(e)
-            except (ZeroDivisionError, NoMoneyError) as e:
+            except (ZeroDivisionError) as e:
                 logging.debug(e)
                 #time.sleep(1)
+
             except Exception as e:
                 logging.error(e)
                 raise e
 
     def stop(self):
         self.started = False
-        logging.info("Stopping trades.")
+        print("Stopping trades.")
         self.cancel_trades()
 
 
@@ -391,11 +395,16 @@ class TixTrader(Trader):
         self.test_rate(rate, this_top_rate, threshold_rate)
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
+        #Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
+        if rates.last_robux_rate:
+            rate_max_gap = min(rates.last_robux_rate-this_top_rate, .001)
+        else:
+            rate_max_gap = .001
         # Add tolerance check
         tolerance = self.get_tolerance(amount)# Lowest % to trade
         while x > tolerance*amount:
             diff = x/math.floor(x/rate) - rate # Difference between our actual rate and top tix rate.
-            if diff < .001:
+            if diff < rate_max_gap:
                 if diff > closest_within_rate:
                     closest_within_rate = diff
                     best_x = x
@@ -426,9 +435,7 @@ class TixTrader(Trader):
         if self.check_trades(): # Trade may not be detected due to server delay
             self.cancel_trades()
         if to_trade > self.get_currency():
-            self.refresh()
-            self.do_trade() # Redo trade
-            return
+            raise NoMoneyError(self.currency)
         
         self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
@@ -553,12 +560,16 @@ class RobuxTrader(Trader):
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, this_top_rate, threshold_rate)
+        #self.test_rate(rate, this_top_rate, threshold_rate)
         x, closest, best_x = amount, sys.maxsize, 0
+        # Trade within .001 of top rate, or lower if the last tix rate is within .001 of top rate
+        rate_max_gap = max(rates.last_tix_rate - this_top_rate, 0)
+        if rate_max_gap != 0:
+            print("Max gap for robux is: ", str(rate_max_gap))
         tolerance = self.get_tolerance(amount)
         while x > tolerance*amount:
             diff = math.ceil(x*rate)/x - rate # Difference between top trade rate and actual rate
-            if diff < closest and diff >= 0:
+            if diff < closest and diff >= rate_max_gap:
                 closest = diff
                 best_x = x
             x -= 1
@@ -588,9 +599,7 @@ class RobuxTrader(Trader):
         if self.check_trades():
             self.cancel_trades()
         if to_trade > self.get_currency():
-            self.refresh()
-            self.do_trade() # Redo trade
-            return
+            raise NoMoneyError(self.currency) # Retry trading
         self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 
