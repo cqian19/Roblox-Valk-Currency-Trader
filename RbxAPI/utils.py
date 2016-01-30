@@ -23,3 +23,10 @@ def find_data_file(filename):
         datadir = os.path.dirname(os.path.abspath(__file__))
 
     return os.path.join(datadir, filename)
+
+def raises_exception(func, *args, **kwargs):
+    try:
+        func(*args, **kwargs)
+        return False
+    except Exception:
+        return True

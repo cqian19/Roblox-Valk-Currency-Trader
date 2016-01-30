@@ -3,7 +3,7 @@ from lxml import html
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
-from .utils import round_down, round_up, to_num, find_data_file
+from .utils import round_down, round_up, to_num, find_data_file, raises_exception
 
 import time
 import logging
@@ -165,6 +165,10 @@ class Trader(QtCore.QObject):
         """Returns the currency amount and rate of the second top available trade in this currency"""
         return self.get_available_trade_info(data[self.currency]['next_trade_info'])
 
+    def get_next_amount(self):
+        """Returns the amount of currency being traded in the second top trade in the category"""
+        return self.get_next_top_trade_info()[0]
+
     def get_next_rate(self):
         """Returns the rate of the second top trade in the category"""
         return self.get_next_top_trade_info()[1]
@@ -187,32 +191,50 @@ class Trader(QtCore.QObject):
                 raise NoMoneyError(self.currency)
         return amount
 
-    def calculate_trade(self, amount):
-        """Determines which rate to match."""
-        spread, this_top_rate, other_top_rate = self.get_spread(), self.get_currency_rate(), self.get_other_rate()
-        if spread > 10000 or spread < -10000:
-            raise BadSpreadError
-        if this_top_rate <= 10 or other_top_rate <= 10:
-            raise LowRateError
+    def get_threshold_rate(self):
+        """Gets the worst possible rate to trade at, so we don't go beyond it"""
+        spread = self.get_spread()
+        other_top_rate, other_second_top_rate = self.get_other_rate(), self.get_other_next_rate()
         if self.holds_top_trade:
-            rate = self.get_next_rate()
             other_threshold_rate = other_top_rate
         elif spread >= 0:
-            rate = this_top_rate
             other_threshold_rate = other_top_rate
         else:
             if self.other_trader.holds_top_trade:
                 # The spread is forcibly negative due to your split trade
                 # In this case, get the second highest trade rate of the other currency.
-                rate = this_top_rate
-                other_threshold_rate = self.get_other_next_rate()
+                other_threshold_rate = other_second_top_rate
             else:
                 if self.current_trade: # A better rate exists on our currency and goes below spread
-                    rate = this_top_rate # Retrying with our last rate, other_threshold_rate has no use 
                     other_threshold_rate = other_top_rate # Use the top rate on the other currency, since our trade may be the 2nd best
                 else: # No trades exist and spread is negative. Match the second best trade in this category.
-                    rate = other_threshold_rate = self.get_next_rate()
-        return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
+                    other_threshold_rate = other_second_top_rate
+        return other_threshold_rate
+
+    def calculate_trade(self, amount):
+        """Determines which rate to match."""
+        spread = self.get_spread()
+        this_top_rate, second_top_rate = self.get_currency_rate(), self.get_next_rate()
+
+        if spread > 10000 or spread < -10000:
+            raise BadSpreadError
+        if this_top_rate <= 10:
+            raise LowRateError
+
+        other_threshold_rate = self.get_threshold_rate()
+        #Trade at top rate
+        #If that doesn't work, try trading at the second top rate instead
+        try:
+            rate = this_top_rate
+            return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
+        except (WorseRateError, BadSpreadError, TradeGapError) as e:
+            # If the second rate is our rate, raise an error
+            if self.current_trade and self.get_next_amount() == self.get_trade_remainder():
+                raise OurTradeError
+            rate = second_top_rate
+            print(type(e))
+            print("Trading at second rate instead")
+            return self.balance_rate(amount,rate, this_top_rate, other_threshold_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         self.last_trade_time = time.time()
@@ -266,15 +288,16 @@ class Trader(QtCore.QObject):
             except BotStoppedError:
                 self.cancel_trades()
                 break
-            except requests.exceptions.ConnectionError as e:
+            except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
-            except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError, TradeGapError, NoMoneyError) as e:
+                time.sleep(10)
+            except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
+                    TradeGapError,  NoMoneyError, OurTradeError) as e:
                 logging.debug(e)
             except (ZeroDivisionError) as e:
                 logging.debug(e)
                 #time.sleep(1)
-
             except Exception as e:
                 logging.error(e)
                 raise e
@@ -392,19 +415,14 @@ class TixTrader(Trader):
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
         self.check_bot_stopped()
-        self.test_rate(rate, this_top_rate, threshold_rate)
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         #Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
-        if rates.last_robux_rate:
-            rate_max_gap = min(rates.last_robux_rate-this_top_rate, .001)
-        else:
-            rate_max_gap = .001
         # Add tolerance check
         tolerance = self.get_tolerance(amount)# Lowest % to trade
         while x > tolerance*amount:
             diff = x/math.floor(x/rate) - rate # Difference between our actual rate and top tix rate.
-            if diff < rate_max_gap:
+            if diff < .001:
                 if diff > closest_within_rate:
                     closest_within_rate = diff
                     best_x = x
@@ -560,16 +578,12 @@ class RobuxTrader(Trader):
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
         self.check_bot_stopped()
-        #self.test_rate(rate, this_top_rate, threshold_rate)
         x, closest, best_x = amount, sys.maxsize, 0
         # Trade within .001 of top rate, or lower if the last tix rate is within .001 of top rate
-        rate_max_gap = max(rates.last_tix_rate - this_top_rate, 0)
-        if rate_max_gap != 0:
-            print("Max gap for robux is: ", str(rate_max_gap))
         tolerance = self.get_tolerance(amount)
         while x > tolerance*amount:
             diff = math.ceil(x*rate)/x - rate # Difference between top trade rate and actual rate
-            if diff < closest and diff >= rate_max_gap:
+            if diff < closest and diff >= 0:
                 closest = diff
                 best_x = x
             x -= 1
