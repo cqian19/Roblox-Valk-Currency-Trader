@@ -22,7 +22,7 @@ logging.basicConfig(
 logging.disable(logging.INFO)
 
 delay = .1  # Second delay between calculating trades.
-gap = .01 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
+gap = .02 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
@@ -369,10 +369,10 @@ class TixTrader(Trader):
         if self.current_trade and self.holds_top_trade:
             next_tix, next_rate = self.get_next_top_trade_info()
             diff = self.current_trade.current_rate - next_rate
-            if self.current_trade.amount1 == self.current_trade.remaining1:
-                if diff > gap:
-                    logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
-                    self.cancel_trades()
+            #if self.current_trade.amount1 == self.current_trade.remaining1:
+            if diff > gap:
+                logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
+                self.cancel_trades()
             elif self.current_trade.remaining1 > .98*self.current_trade.amount1:
                 if diff > .05:
                     self.cancel_trades()
@@ -533,10 +533,10 @@ class RobuxTrader(Trader):
             # Get the second highest trade's info
             next_robux, next_rate = self.get_next_top_trade_info()
             diff = next_rate - self.current_trade.current_rate
-            if self.current_trade.amount1 == self.current_trade.remaining1:
-                if diff > gap:
-                    logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
-                    self.cancel_trades()
+            #if self.current_trade.amount1 == self.current_trade.remaining1:
+            if diff > gap:
+                logging.info('Trade gap is big ({}) Trading for a better rate...'.format(str(diff)))
+                self.cancel_trades()
             elif self.current_trade.remaining1 >= .98*self.current_trade.amount1:
                 if diff > .05:
                     self.cancel_trades()
