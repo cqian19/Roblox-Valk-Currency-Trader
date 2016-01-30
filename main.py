@@ -122,6 +122,9 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         if text:
             trade.row = self.add_trade_gui(text, target)
 
+    def clear_gui_log(self):
+        self.currentTradeTable.clear()
+
     def make_row(self, text):
         if not hasattr(self, 'new_row'):
             new_row = QtGui.QListWidgetItem(text)
@@ -191,6 +194,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
         self.stop_thread(self.robux_thread)
+        self.clear_gui_log()
 
     def start_pressed(self):
         # Cancel trades on end
