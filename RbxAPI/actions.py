@@ -160,7 +160,10 @@ class Trader(QtCore.QObject):
 
     def get_top_trade_info(self):
         """Returns the currency amount and rate of the top available trade in this currency"""
-        return self.get_available_trade_info(data[self.currency]['top_trade_info'])
+        try:
+            return self.get_available_trade_info(data[self.currency]['top_trade_info'])
+        except MarketTraderError:
+            return self.get_next_top_trade_info()
 
     def get_next_top_trade_info(self):
         """Returns the currency amount and rate of the second top available trade in this currency"""
