@@ -21,7 +21,7 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .1  # Second delay between calculating trades.
+delay = .075  # Second delay between calculating trades.
 gap = .01 # Maximum gap between our rate and next to top rate permitted (Lower gap = more safety)
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
@@ -96,8 +96,12 @@ class Trader(QtCore.QObject):
 
     def get_auth_tools(self):
         # VIEWSTATE and EVENTVALIDATION must be from the same session
-        viewstate = self.get_raw_data('//input[@name="__VIEWSTATE"]').attrib['value']
-        eventvalidation = self.get_raw_data('//input[@name="__EVENTVALIDATION"]').attrib['value']
+        vsd = self.get_raw_data('//input[@name="__VIEWSTATE"]')
+        evd = self.get_raw_data('//input[@name="__EVENTVALIDATION"]')
+        if vsd == [] or evd == []:
+            raise requests.exceptions.ConnectionError
+        viewstate = vsd.attrib['value']
+        eventvalidation = evd.attrib['value']
         return viewstate, eventvalidation
 
     def get_currency(self):
@@ -295,7 +299,7 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
-                time.sleep(10)
+                #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError) as e:
                 logging.debug(e)
@@ -375,7 +379,7 @@ class TixTrader(Trader):
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff > gap or ntdiff > gap:
+            if startdiff >= gap or ntdiff >= gap:
                 self.cancel_trades()
             elif self.current_trade.remaining1 > .98*self.current_trade.amount1:
                 if ntdiff > .05:
@@ -539,7 +543,7 @@ class RobuxTrader(Trader):
             startdiff = self.current_trade.start_rate - self.current_trade.current_rate
             ntdiff = next_rate - self.current_trade.current_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff > gap or ntdiff > gap:
+            if startdiff >= gap or ntdiff >= gap:
                 self.cancel_trades()
             elif self.current_trade.remaining1 >= .98*self.current_trade.amount1:
                 if ntdiff > .05:
