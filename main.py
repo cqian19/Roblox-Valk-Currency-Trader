@@ -7,6 +7,7 @@ import guifiles.mainGui as gui
 import configparser
 import logging
 import sys
+import time
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
@@ -194,6 +195,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
         self.stop_thread(self.robux_thread)
+        time.sleep(.01)
         self.clear_gui_log()
 
     def start_pressed(self):
