@@ -245,7 +245,6 @@ class Trader(QtCore.QObject):
             return self.balance_rate(amount,rate, this_top_rate, other_threshold_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
-        self.last_trade_time = time.time()
         vs, ev = self.get_auth_tools()
         self.trade_payload[data['split_trades']] = self.config['split_trades']
         self.trade_payload[data['give_box']] = str(amount_to_give)
@@ -264,7 +263,6 @@ class Trader(QtCore.QObject):
                 self.last_trade_time = now
                 rates.last_tix_rate = 0
                 rates.last_robux_rate = 0
-                self.cancel_trades()
             else:
                 self.last_trade_time = now
 
@@ -467,6 +465,8 @@ class TixTrader(Trader):
         self.submit_trade(to_trade, receive)
 
         rates.current_tix_rate = rate
+        if round_down(rate) >= self.get_currency_rate():
+            self.last_trade_time = time.time()
 
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
         self.current_trade = new_trade
@@ -626,7 +626,9 @@ class RobuxTrader(Trader):
         self.submit_trade(to_trade, receive)
 
         rates.current_robux_rate = rate
-        
+        if round_down(rate) <= self.get_currency_rate():
+            self.last_trade_time = time.time()
+
         new_trade = Trade(to_trade, receive, 'Robux', 'Tickets', rate)
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)
