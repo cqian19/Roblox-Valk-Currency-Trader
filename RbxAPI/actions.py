@@ -21,9 +21,9 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .075  # Second delay between calculating trades.
-rgap = .007 # Max gap before cancelling a robux split trade
-tgap = .003 # Max gap before cancelling a tix split trade
+delay = .04  # Second delay between calculating trades.
+rgap = .005 # Max gap before cancelling a robux split trade
+tgap = .0025 # Max gap before cancelling a tix split trade
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
@@ -50,6 +50,7 @@ class Trader(QtCore.QObject):
         self._current_trade = None
         self.last_tree = None
         self.last_trade_time = time.time()
+        self.rate_updated = False
         self.trade_payload = {
             data['give_type']: self.currency,
             data['receive_type']: self.other_currency,
@@ -75,6 +76,8 @@ class Trader(QtCore.QObject):
             self.my_trader.holds_top_trade = False
         if old_trade:
             self.trade_log.complete_trade(old_trade)
+        if self.rate_updated:
+            self.rate_updated = False
 
     def set_config(self, option, value):
         self.config[option] = value
@@ -349,10 +352,11 @@ class TixTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if amount_remain < .98*self.current_trade.remaining1:
+                if amount_remain < .98*self.current_trade.remaining1 and not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.current_tix_rate = start_rate
                     rates.last_tix_rate = max(start_rate, rates.last_tix_rate)
+                    self.rate_updated = True
                 self.current_trade.update(amount_remain, top_rate)
         elif self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
@@ -362,11 +366,7 @@ class TixTrader(Trader):
         # If the trade is a split trade, the rate may appear low, but the trade amount remains a profit, so don't cancel
         if self.current_trade and self.current_trade.amount1 == self.current_trade.remaining1:
             rate = self.current_trade.current_rate
-            if rates.last_robux_rate and rate > rates.last_robux_rate:
-                self.cancel_trades()
-            elif rates.current_robux_rate and rate > rates.current_robux_rate:
-                self.cancel_trades()
-            elif not rates.last_robux_rate and not rates.current_robux_rate:
+            if not rates.last_robux_rate and not rates.current_robux_rate:
                 if rate > self.get_other_rate():
                     self.cancel_trades()
 
@@ -423,7 +423,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
-        #Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
+        # Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
         # Add tolerance check
         tolerance = self.get_tolerance(amount)# Lowest % to trade
         while x > tolerance*amount:
@@ -443,7 +443,7 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1.5: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
             rates.current_tix_rate = 0
@@ -493,13 +493,14 @@ class RobuxTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if amount_remain <= .98*self.current_trade.remaining1:
+                if amount_remain <= .98*self.current_trade.remaining1 and not self.rate_updated:
                     start_rate = self.current_trade.start_rate 
                     rates.current_robux_rate = start_rate
                     if rates.last_robux_rate:
                         rates.last_robux_rate = min(start_rate, rates.last_robux_rate)
                     else:
                         rates.last_robux_rate = start_rate
+                    self.rate_updated = True
                 self.current_trade.update(amount_remain, top_rate)
         elif self.current_trade:
             self.fully_complete_trade()
@@ -508,11 +509,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         if self.current_trade and self.current_trade.amount1 == self.current_trade.remaining1:
             rate = self.current_trade.current_rate
-            if rates.last_tix_rate and rate < rates.last_tix_rate:
-                self.cancel_trades()
-            elif rates.current_tix_rate and rate < rates.current_tix_rate:
-                self.cancel_trades()
-            elif not rates.last_tix_rate and not rates.current_tix_rate:
+            if not rates.last_tix_rate and not rates.current_tix_rate:
                 if rate < self.get_other_rate():
                     self.cancel_trades()
 
@@ -575,7 +572,7 @@ class RobuxTrader(Trader):
         logging.debug("Last tix rate: ", str(last_rate))
         if this_top_rate - rate >= rgap:
             raise TradeGapError
-        if last_rate and rate <= last_rate:
+        if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
             if not threshold_rate:
@@ -602,7 +599,7 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1.5: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
