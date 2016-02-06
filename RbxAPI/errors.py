@@ -79,3 +79,4 @@ class MarketTraderError(Exception):
 class OurTradeError(Exception):
 
     """Raised when we are trying to compete with our own trade"""
+

@@ -243,7 +243,7 @@ class Trader(QtCore.QObject):
         #If that doesn't work, try trading at the second top rate instead
         try:
             rate = this_top_rate
-            if self.current_trade and self.holds_top_trade:
+            if self.current_trade and self.get_top_amount() == self.get_trade_remainder():
                 raise OurTradeError
             return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
         except (WorseRateError, BadSpreadError, TradeGapError, OurTradeError) as e:
@@ -251,8 +251,6 @@ class Trader(QtCore.QObject):
             if self.current_trade and self.get_next_amount() == self.get_trade_remainder():
                 raise OurTradeError
             rate = second_top_rate
-            print(type(e))
-            print("Trading at second rate instead", self.currency)
             return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
@@ -310,7 +308,7 @@ class Trader(QtCore.QObject):
                 print("Connection interrupted")
                 #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
-                    TradeGapError,  NoMoneyError, OurTradeError) as e:
+                    TradeGapError,  NoMoneyError, OurTradeError, NewTradeException) as e:
                 logging.debug(e)
             except (ZeroDivisionError) as e:
                 logging.debug(e)
@@ -464,7 +462,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.current_trade: # Trade may not be detected due to server delay
+        if self.check_trades() or self.current_trade: # Trade may not be detected due to server delay
             self.cancel_trades()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency)
@@ -623,7 +621,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.current_trade:
+        if self.current_trade or self.check_trades():
             self.cancel_trades()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency) # Retry trading
