@@ -195,7 +195,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
         self.stop_thread(self.robux_thread)
-        time.sleep(.1)
         self.clear_gui_log()
         print("CLEARED")
 

@@ -90,10 +90,10 @@ class Trader(QtCore.QObject):
         self.last_tree = html.fromstring(r.text)
 
 
-    def get_raw_data(self, d):
+    def get_raw_data(self, d, unpack=True):
         tree = self.last_tree
         data = tree.xpath(d)
-        if len(data) == 1:
+        if len(data) == 1 and unpack:
             return data[0]
         return data
 
@@ -147,37 +147,24 @@ class Trader(QtCore.QObject):
     def check_trades(self):
         """Returns True if a trade is still active"""
         return self.get_raw_data(data[self.currency]['trades']) == []
-            
-    def cancel_trades(self):
-        payload = {
-            '__EVENTTARGET': data[self.currency]['cancel_bid']
-        }
-        if self.current_trade:
-            self.update_current_trade()
-            self.current_trade = None
-        #Cancelling top trade ()
-        vs, ev = self.get_auth_tools()
-        payload['__EVENTVALIDATION'] = ev
-        payload['__VIEWSTATE'] = vs
-        session.post(TC_URL, data=payload)
-        if self.currency == 'Tickets':
-            rates.current_tix_rate = 0
-        else:
-            rates.current_robux_rate = 0
+
+    def get_trade_info(self, index):
+        """Gets the trade info starting from the top (index = 1)"""
+        try:
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](index))
+        except MarketTraderError: # Actual trade info is at index + 1
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](index + 1))
 
     def get_top_trade_info(self):
         """Returns the currency amount and rate of the top available trade in this currency"""
-        try: # Gets the info of the top trade (ID=1)
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](1))
-        except MarketTraderError: # Get the info of the second trade (ID=2)
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](2))
+        return self.get_trade_info(1)
 
     def get_next_top_trade_info(self):
         """Returns the currency amount and rate of the second top available trade in this currency"""
-        try:
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](2))
-        except MarketTraderError:
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](3))
+        return self.get_trade_info(2)
+
+    def get_third_top_trade_info(self):
+        return self.get_trade_info(3)
 
     def get_top_amount(self):
         return self.get_top_trade_info()[0]
@@ -189,6 +176,9 @@ class Trader(QtCore.QObject):
     def get_next_rate(self):
         """Returns the rate of the second top trade in the category"""
         return self.get_next_top_trade_info()[1]
+
+    def get_third_rate(self):
+        return self.get_third_top_trade_info()[1]
 
     def get_other_next_rate(self):
         """Returns the rate of the second top trade in the category of the other currency"""
@@ -232,26 +222,48 @@ class Trader(QtCore.QObject):
         """Determines which rate to match."""
         spread = self.get_spread()
         this_top_rate, second_top_rate = self.get_currency_rate(), self.get_next_rate()
-
+        third_top_rate = self.get_third_rate()
         if spread > 10000 or spread < -10000:
             raise BadSpreadError
-        if this_top_rate <= 10:
-            raise LowRateError
-
+        # Check if our trade is top trade
+        if self.current_trade and self.get_top_amount() == self.get_trade_remainder():
+            rate, next_rate = second_top_rate, third_top_rate
+        else:
+            rate, next_rate = this_top_rate, second_top_rate
+            if this_top_rate <= 10:
+                raise LowRateError
         other_threshold_rate = self.get_threshold_rate()
         #Trade at top rate
         #If that doesn't work, try trading at the second top rate instead
         try:
-            rate = this_top_rate
-            if self.current_trade and self.get_top_amount() == self.get_trade_remainder():
-                raise OurTradeError
             return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
         except (WorseRateError, BadSpreadError, TradeGapError, OurTradeError) as e:
             # If the second rate is our rate, raise an error
             if self.current_trade and self.get_next_amount() == self.get_trade_remainder():
                 raise OurTradeError
-            rate = second_top_rate
-            return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
+            return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)
+
+    def cancel_trades(self):
+        """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
+        trades = list(self.get_raw_data(data[self.currency]['open_trades'], False))
+        trade_count = len(trades)
+        if self.current_trade:
+            self.update_current_trade()
+            self.current_trade = None
+        for i in range(trade_count, 0, -1):
+            index = i - 1
+            payload = {
+                '__EVENTTARGET': data[self.currency]['cancel_bid'](index) # lambda starts at 0 index
+            }
+            #Cancelling top trade ()
+            vs, ev = self.get_auth_tools()
+            payload['__EVENTVALIDATION'] = ev
+            payload['__VIEWSTATE'] = vs
+            session.post(TC_URL, data=payload)
+        if self.currency == 'Tickets':
+            rates.current_tix_rate = 0
+        else:
+            rates.current_robux_rate = 0
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         vs, ev = self.get_auth_tools()
@@ -308,7 +320,7 @@ class Trader(QtCore.QObject):
                 print("Connection interrupted")
                 #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
-                    TradeGapError,  NoMoneyError, OurTradeError, NewTradeException) as e:
+                    TradeGapError,  NoMoneyError, OurTradeError) as e:
                 logging.debug(e)
             except (ZeroDivisionError) as e:
                 logging.debug(e)
