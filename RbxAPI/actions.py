@@ -21,7 +21,7 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .04  # Second delay between calculating trades.
+delay = .1  # Second delay between calculating trades.
 rgap = .005 # Max gap before cancelling a robux split trade
 tgap = .0025 # Max gap before cancelling a tix split trade
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
@@ -378,10 +378,10 @@ class TixTrader(Trader):
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
             if startdiff >= tgap or ntdiff >= tgap:
-                self.cancel_trades()
+                self.do_trade()
             elif self.current_trade.remaining1 > .98*self.current_trade.amount1:
                 if ntdiff > .05:
-                    self.cancel_trades()
+                    self.do_trade()
 
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
@@ -541,10 +541,10 @@ class RobuxTrader(Trader):
             ntdiff = next_rate - self.current_trade.current_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
             if startdiff >= rgap or ntdiff >= rgap:
-                self.cancel_trades()
+                self.do_trade()
             elif self.current_trade.remaining1 >= .98*self.current_trade.amount1:
                 if ntdiff > .05:
-                    self.cancel_trades()
+                    self.do_trade()
 
     def check_better_rate(self):
         """Check if a better rate for robux to tix exists"""
