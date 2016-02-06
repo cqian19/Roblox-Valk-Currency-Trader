@@ -167,14 +167,20 @@ class Trader(QtCore.QObject):
 
     def get_top_trade_info(self):
         """Returns the currency amount and rate of the top available trade in this currency"""
-        try:
-            return self.get_available_trade_info(data[self.currency]['top_trade_info'])
-        except MarketTraderError:
-            return self.get_next_top_trade_info()
+        try: # Gets the info of the top trade (ID=1)
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](1))
+        except MarketTraderError: # Get the info of the second trade (ID=2)
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](2))
 
     def get_next_top_trade_info(self):
         """Returns the currency amount and rate of the second top available trade in this currency"""
-        return self.get_available_trade_info(data[self.currency]['next_trade_info'])
+        try:
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](2))
+        except MarketTraderError:
+            return self.get_available_trade_info(data[self.currency]['trade_info_path'](3))
+
+    def get_top_amount(self):
+        return self.get_top_trade_info()[0]
 
     def get_next_amount(self):
         """Returns the amount of currency being traded in the second top trade in the category"""
@@ -186,7 +192,7 @@ class Trader(QtCore.QObject):
 
     def get_other_next_rate(self):
         """Returns the rate of the second top trade in the category of the other currency"""
-        return self.other_trader.get_available_trade_info(self, data[self.other_currency]['next_trade_info'])[1]
+        return self.other_trader.get_available_trade_info(self, data[self.other_currency]['trade_info_path'](2))[1]
 
     def get_amount_to_trade(self):
         our_money = self.get_currency()
@@ -237,15 +243,17 @@ class Trader(QtCore.QObject):
         #If that doesn't work, try trading at the second top rate instead
         try:
             rate = this_top_rate
+            if self.current_trade and self.holds_top_trade:
+                raise OurTradeError
             return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
-        except (WorseRateError, BadSpreadError, TradeGapError) as e:
+        except (WorseRateError, BadSpreadError, TradeGapError, OurTradeError) as e:
             # If the second rate is our rate, raise an error
             if self.current_trade and self.get_next_amount() == self.get_trade_remainder():
                 raise OurTradeError
             rate = second_top_rate
             print(type(e))
             print("Trading at second rate instead", self.currency)
-            return self.balance_rate(amount,rate, this_top_rate, other_threshold_rate)
+            return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
 
     def submit_trade(self, amount_to_give, amount_to_receive):
         vs, ev = self.get_auth_tools()
@@ -456,7 +464,7 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades(): # Trade may not be detected due to server delay
+        if self.current_trade: # Trade may not be detected due to server delay
             self.cancel_trades()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency)
@@ -615,7 +623,7 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         to_trade, receive, rate = self.calculate_trade(amount)
         self.check_bot_stopped()
-        if self.check_trades():
+        if self.current_trade:
             self.cancel_trades()
         if to_trade > self.get_currency():
             raise NoMoneyError(self.currency) # Retry trading
