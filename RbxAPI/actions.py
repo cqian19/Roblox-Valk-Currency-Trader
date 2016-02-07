@@ -21,7 +21,7 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .1  # Second delay between calculating trades.
+delay = .07  # Second delay between calculating trades.
 rgap = .005 # Max gap before cancelling a robux split trade
 tgap = .0025 # Max gap before cancelling a tix split trade
 reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
@@ -149,10 +149,7 @@ class Trader(QtCore.QObject):
 
     def get_trade_info(self, index):
         """Gets the trade info starting from the top (index = 1)"""
-        try:
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](index))
-        except MarketTraderError: # Actual trade info is at index + 1
-            return self.get_available_trade_info(data[self.currency]['trade_info_path'](index + 1))
+        return self.get_available_trade_info(index)
 
     def get_top_trade_info(self):
         """Returns the currency amount and rate of the top available trade in this currency"""
@@ -181,7 +178,7 @@ class Trader(QtCore.QObject):
 
     def get_other_next_rate(self):
         """Returns the rate of the second top trade in the category of the other currency"""
-        return self.other_trader.get_available_trade_info(self, data[self.other_currency]['trade_info_path'](2))[1]
+        return self.other_trader.get_available_trade_info(self, 2)[1]
 
     def get_amount_to_trade(self):
         our_money = self.get_currency()
@@ -317,6 +314,7 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
+                raise e
                 #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError) as e:
@@ -348,16 +346,17 @@ class TixTrader(Trader):
         self.my_trader = TixTrader
         self.other_trader = RobuxTrader
 
-    def get_available_trade_info(self, trade_info):
+    def get_available_trade_info(self, index):
         """Parses the trade information string from the available tix column"""
          # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
+        trade_info = data["Tickets"]['trade_info_path'](index)
         info = self.get_raw_data(trade_info) # May be None if connection is reset
         if not info:
             raise requests.exceptions.ConnectionError
         rate_split = [x for x in info.split(' ') if x and x[0].isdigit()]
         # If the trader is @ Market
-        if len(rate_split) <= 1:
-            raise MarketTraderError
+        #if len(rate_split) <= 1:
+        #    raise MarketTraderError
         tix, all_rate = to_num(rate_split[0]), rate_split[1]
         rate = float(all_rate.split(':')[0])
         return tix, rate
@@ -475,13 +474,6 @@ class TixTrader(Trader):
         self.check_bot_stopped()
         if self.check_trades(): # Trade may not be detected due to server delay
             self.cancel_trades()
-        if to_trade > self.get_currency():
-            self.refresh()
-            amount = self.get_amount_to_trade()
-            to_trade, receive, rate = self.calculate_trade(amount)
-            if to_trade > self.get_currency():
-                raise NoMoneyError(self.currency) # Retry trading
-        
         self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 
@@ -534,23 +526,37 @@ class RobuxTrader(Trader):
                 if rate < self.get_other_rate():
                     self.cancel_trades()
 
-    def get_available_trade_info(self, trade_info):
-        """Parses the trade information string from the available robux column"""
-        amount_info = self.get_raw_data(trade_info[0])
-        #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
-        rate_info = self.get_raw_data(trade_info[1])
-        if not amount_info or not rate_info:
+    @staticmethod
+    def check_at_market(self):
+        """Checks if the top robux trade is @ Market"""
+        trade_info_path = data['Robux']['trade_info_path'](1)
+        #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
+        trade_info = self.get_raw_data(trade_info_path[1])
+        if not trade_info_path:
             raise requests.exceptions.ConnectionError
-        robux = to_num(amount_info)
-        # Gets the 1:rate\r\n part
-        all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
-        # Check if the trade is @ Market
-        if not len(all_rate):
-            raise MarketTraderError
-        # Gets the rate part
-        rate = (all_rate[0].split(':')[1]).split('\\')[0]
-        rate = float(rate)
-        return robux, rate
+        rate_info = trade_info[1]
+        return 'Market' in rate_info
+
+    def get_available_trade_info(self, i):
+        """Parses the trade information string of the ith trade in the available robux column"""
+        def helper(trade_info):
+            amount_info = self.get_raw_data(trade_info[0])
+            #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
+            rate_info = self.get_raw_data(trade_info[1])
+            if not amount_info or not rate_info:
+                raise requests.exceptions.ConnectionError
+            robux = to_num(amount_info)
+            # Gets the 1:rate\r\n part
+            all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
+            # Check if the trade is @ Market
+
+            # Gets the rate part
+            rate = (all_rate[0].split(':')[1]).split('\\')[0]
+            rate = float(rate)
+            return robux, rate
+        if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
+            i += 1
+        return helper(data["Robux"]['trade_info_path'](i))
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
@@ -638,12 +644,6 @@ class RobuxTrader(Trader):
         self.check_bot_stopped()
         if self.check_trades():
             self.cancel_trades()
-        if to_trade > self.get_currency():
-            self.refresh()
-            amount = self.get_amount_to_trade()
-            to_trade, receive, rate = self.calculate_trade(amount)
-            if to_trade > self.get_currency():
-                raise NoMoneyError(self.currency) # Retry trading
         self.check_bot_stopped()
         self.submit_trade(to_trade, receive)
 

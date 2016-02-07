@@ -22,7 +22,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         super().__init__(parent)
         self.setupUi(self)
 
-        self.first_start = False
         self.started = False
         # Traders
         self.trade_log = TradeLog()
@@ -207,15 +206,13 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
             self.stop_bots()
             self.startButton.setEnabled(True)
         else:
-            if not self.first_start:
-                self.first_start = True
             self.started = True
             button.setText('Stop')
             self.start_bots()
 
     def closeEvent(self, event):
         """Builtin method executed when GUI is closed."""
-        if self.first_start:
+        if self.started:
             self.stop_bots()
         self.save_config()
         print('Ending bot')
