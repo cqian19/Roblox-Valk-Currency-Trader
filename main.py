@@ -109,7 +109,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         gui_row = trade.row
         if gui_row:
             current.takeItem(current.row(gui_row))
-
         amount_traded = trade.amount1 - trade.remaining1
         text = ""
         print(trade)
@@ -195,8 +194,8 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
         self.stop_thread(self.robux_thread)
+        time.sleep(.3)
         self.clear_gui_log()
-        print("CLEARED")
 
     def start_pressed(self):
         # Cancel trades on end
