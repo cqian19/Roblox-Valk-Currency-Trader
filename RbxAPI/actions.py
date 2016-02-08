@@ -24,7 +24,7 @@ logging.disable(logging.INFO)
 delay = .07  # Second delay between calculating trades.
 rgap = .005 # Max gap before cancelling a robux split trade
 tgap = .0025 # Max gap before cancelling a tix split trade
-reset_time = 300 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
+reset_time = 200 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
 cacertpath = find_data_file('cacert.pem')
@@ -219,13 +219,13 @@ class Trader(QtCore.QObject):
         spread = self.get_spread()
         this_top_rate, second_top_rate = self.get_currency_rate(), self.get_next_rate()
         third_top_rate = self.get_third_rate()
-        if spread > 10000 or spread < -10000:
-            raise BadSpreadError
         # Check if our trade is top trade
         if self.holds_top_trade:
             rate, next_rate = second_top_rate, third_top_rate
         else:
             rate, next_rate = this_top_rate, second_top_rate
+            if spread > 10000 or spread < -10000:
+                raise BadSpreadError
             if this_top_rate <= 10:
                 raise LowRateError
         other_threshold_rate = self.get_threshold_rate()
@@ -346,10 +346,10 @@ class TixTrader(Trader):
         self.my_trader = TixTrader
         self.other_trader = RobuxTrader
 
-    def get_available_trade_info(self, index):
-        """Parses the trade information string from the available tix column"""
+    def get_available_trade_info(self, i):
+        """Parses the trade information string of the ith trade from the available tix column"""
          # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
-        trade_info = data["Tickets"]['trade_info_path'](index)
+        trade_info = data['Tickets']['trade_info_path'](i)
         info = self.get_raw_data(trade_info) # May be None if connection is reset
         if not info:
             raise requests.exceptions.ConnectionError
@@ -392,6 +392,7 @@ class TixTrader(Trader):
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
+            print(self.current_trade.current_rate, next_rate, ntdiff)
             #if self.current_trade.amount1 == self.current_trade.remaining1:
             if startdiff >= tgap or ntdiff >= tgap:
                 self.do_trade()
@@ -526,37 +527,34 @@ class RobuxTrader(Trader):
                 if rate < self.get_other_rate():
                     self.cancel_trades()
 
-    @staticmethod
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
         trade_info_path = data['Robux']['trade_info_path'](1)
-        #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
-        trade_info = self.get_raw_data(trade_info_path[1])
         if not trade_info_path:
             raise requests.exceptions.ConnectionError
+        #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
+        trade_info = self.get_raw_data(trade_info_path[1])
         rate_info = trade_info[1]
         return 'Market' in rate_info
 
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade in the available robux column"""
-        def helper(trade_info):
-            amount_info = self.get_raw_data(trade_info[0])
-            #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
-            rate_info = self.get_raw_data(trade_info[1])
-            if not amount_info or not rate_info:
-                raise requests.exceptions.ConnectionError
-            robux = to_num(amount_info)
-            # Gets the 1:rate\r\n part
-            all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
-            # Check if the trade is @ Market
-
-            # Gets the rate part
-            rate = (all_rate[0].split(':')[1]).split('\\')[0]
-            rate = float(rate)
-            return robux, rate
         if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
             i += 1
-        return helper(data["Robux"]['trade_info_path'](i))
+
+        trade_info = data['Robux']['trade_info_path'](i)
+        amount_info = self.get_raw_data(trade_info[0])
+        # Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
+        rate_info = self.get_raw_data(trade_info[1])
+        if not amount_info or not rate_info:
+            raise requests.exceptions.ConnectionError
+        robux = to_num(amount_info)
+        # Gets the 1:rate\r\n part
+        all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
+        # Gets the rate part
+        rate = (all_rate[0].split(':')[1]).split('\\')[0]
+        rate = float(rate)
+        return robux, rate
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
@@ -595,9 +593,9 @@ class RobuxTrader(Trader):
 
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Verifies that this is a better and profit making rate to trade at"""
-        current_rate, last_rate = rates.current_tix_rate, rates.last_tix_rate
+        last_rate = rates.last_tix_rate
         logging.debug("Last tix rate: ", str(last_rate))
-        if this_top_rate - rate >= rgap:
+        if not self.holds_top_trade and this_top_rate - rate >= rgap:
             raise TradeGapError
         if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
