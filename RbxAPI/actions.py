@@ -531,10 +531,10 @@ class RobuxTrader(Trader):
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
         trade_info_path = data['Robux']['trade_info_path'](1)
-        if not trade_info_path:
-            raise requests.exceptions.ConnectionError
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
         trade_info = self.get_raw_data(trade_info_path[1])
+        if not trade_info:
+            raise requests.exceptions.ConnectionError
         rate_info = trade_info[1]
         return 'Market' in rate_info
 
