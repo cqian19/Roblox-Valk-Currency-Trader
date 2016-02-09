@@ -11,6 +11,7 @@ import math
 import requests
 import os
 import sys
+import cProfile
 
 from requests.packages.urllib3.util import Retry
 
@@ -190,7 +191,7 @@ class Trader(QtCore.QObject):
                 amount = our_money
         else:
             amount = self.config['amount']
-            if not amount or amount > self.get_currency():
+            if not amount or amount > self.get_currency() + self.get_trade_remainder():
                 raise NoMoneyError(self.currency)
         return amount
 
@@ -217,8 +218,7 @@ class Trader(QtCore.QObject):
     def calculate_trade(self, amount):
         """Determines which rate to match."""
         spread = self.get_spread()
-        this_top_rate, second_top_rate = self.get_currency_rate(), self.get_next_rate()
-        third_top_rate = self.get_third_rate()
+        this_top_rate, second_top_rate, third_top_rate = self.get_currency_rate(), self.get_next_rate(), self.get_third_rate()
         # Check if our trade is top trade
         if self.holds_top_trade:
             rate, next_rate = second_top_rate, third_top_rate
@@ -290,6 +290,7 @@ class Trader(QtCore.QObject):
     def start(self):
         self.started = True
         while self.started:
+            test_time = time.time()
             time.sleep(delay)
             try:
                 self.refresh()
@@ -392,7 +393,6 @@ class TixTrader(Trader):
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
-            print(self.current_trade.current_rate, next_rate, ntdiff)
             #if self.current_trade.amount1 == self.current_trade.remaining1:
             if startdiff >= tgap or ntdiff >= tgap:
                 self.do_trade()
@@ -423,7 +423,7 @@ class TixTrader(Trader):
 
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Tests if the rate is better than the last rate"""
-        current_rate, last_rate = rates.current_robux_rate, rates.last_robux_rate
+        last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
         if rate - this_top_rate >= tgap:
             raise TradeGapError
@@ -482,6 +482,7 @@ class TixTrader(Trader):
         if round_down(rate) >= self.get_currency_rate():
             self.last_trade_time = time.time()
 
+        self.check_bot_stopped()
         new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)
@@ -649,6 +650,7 @@ class RobuxTrader(Trader):
         if round_down(rate) <= self.get_currency_rate():
             self.last_trade_time = time.time()
 
+        self.check_bot_stopped()
         new_trade = Trade(to_trade, receive, 'Robux', 'Tickets', rate)
         self.current_trade = new_trade
         self.trade_log.add_trade(new_trade)

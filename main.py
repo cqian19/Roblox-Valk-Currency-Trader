@@ -180,6 +180,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
     def start_bots(self):
         print("Starting bot trading")
+        self.clear_gui_log()
         self.tix_thread.start()
         self.robux_thread.start()
 
@@ -193,8 +194,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.robux_trader.stop()
         self.stop_thread(self.tix_thread)
         self.stop_thread(self.robux_thread)
-        time.sleep(.3)
-        self.clear_gui_log()
 
     def start_pressed(self):
         # Cancel trades on end
