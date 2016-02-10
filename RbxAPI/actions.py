@@ -3,7 +3,7 @@ from lxml import html
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
-from .utils import round_down, round_up, to_num, find_data_file, raises_exception
+from .utils import round_down, round_up, to_num, find_data_file
 
 import time
 import logging
@@ -31,8 +31,8 @@ reset_time = 200 # Number of seconds the bot goes without trading before resetti
 cacertpath = find_data_file('cacert.pem')
 os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
 session = requests.Session()
-session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,backoff_factor=.3)))
-session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,backoff_factor=.3)))
+session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.5)))
+session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.3)))
 # Storing variables since they can't be stored in QObject
 class RateHandler():
     last_tix_rate = 0.0
@@ -62,7 +62,8 @@ class Trader(QtCore.QObject):
         self.config = {
             'split_trades': '',
             'trade_all': False,
-            'amount': 0
+            'amount': 0,
+            'early_cancel': True
         }
 
     @property
@@ -147,6 +148,11 @@ class Trader(QtCore.QObject):
     def check_trades(self):
         """Returns True if a trade is still active"""
         return self.get_raw_data(data[self.currency]['trades']) == []
+
+    def get_trade_count(self):
+        trades = list(self.get_raw_data(data[self.currency]['open_trades'], False))
+        trade_count = len(trades)
+        return trade_count
 
     def get_trade_info(self, index):
         """Gets the trade info starting from the top (index = 1)"""
@@ -241,8 +247,7 @@ class Trader(QtCore.QObject):
 
     def cancel_trades(self):
         """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
-        trades = list(self.get_raw_data(data[self.currency]['open_trades'], False))
-        trade_count = len(trades)
+        trade_count = get_trade_count()
         if self.current_trade:
             self.update_current_trade()
             self.current_trade = None
@@ -301,6 +306,8 @@ class Trader(QtCore.QObject):
                             self.do_trade()
                     else:
                         self.do_trade()
+                elif self.get_trade_count() > 1: #Lag error? Better clean it up.
+                    self.cancel_trades()
                 elif self.current_trade:
                     if self.check_better_rate():
                         self.do_trade()
@@ -315,7 +322,6 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
-                raise e
                 #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError) as e:
@@ -389,16 +395,13 @@ class TixTrader(Trader):
 
     def check_trade_gap(self):
         self.check_bot_stopped()
-        if self.current_trade and self.holds_top_trade:
+        if self.early_cancel and self.current_trade and self.holds_top_trade:
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff >= tgap or ntdiff >= tgap:
+            if startdiff >= tgap - .00001 or ntdiff >= tgap - .00001: # Float stuff
                 self.do_trade()
-            elif self.current_trade.remaining1 > .98*self.current_trade.amount1:
-                if ntdiff > .05:
-                    self.do_trade()
 
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
@@ -533,7 +536,7 @@ class RobuxTrader(Trader):
         trade_info_path = data['Robux']['trade_info_path'](1)
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
         trade_info = self.get_raw_data(trade_info_path[1])
-        if not trade_info:
+        if not len(trade_info):
             raise requests.exceptions.ConnectionError
         rate_info = trade_info[1]
         return 'Market' in rate_info
@@ -560,17 +563,14 @@ class RobuxTrader(Trader):
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
         self.check_bot_stopped()
-        if self.current_trade and self.holds_top_trade:
+        if self.early_cancel and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.start_rate - self.current_trade.current_rate
             ntdiff = next_rate - self.current_trade.current_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff >= rgap or ntdiff >= rgap:
+            if startdiff >= rgap - .000001 or ntdiff >= rgap - .000001: # Float stuff
                 self.do_trade()
-            elif self.current_trade.remaining1 >= .98*self.current_trade.amount1:
-                if ntdiff > .05:
-                    self.do_trade()
 
     def check_better_rate(self):
         """Check if a better rate for robux to tix exists"""

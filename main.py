@@ -35,12 +35,16 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.passwordField.returnPressed.connect(self.login_pressed)
         self.loginButton.clicked.connect(self.login_pressed)
         # Options
+        # Check box
         self.tixSplitTrades.stateChanged.connect(partial(self.split_pressed, self.tix_trader))
         self.robuxSplitTrades.stateChanged.connect(partial(self.split_pressed, self.robux_trader))
         self.tixTradeAll.stateChanged.connect(
             partial(self.trade_all_pressed, self.tix_trader, self.tixAmount))
         self.robuxTradeAll.stateChanged.connect(
             partial(self.trade_all_pressed, self.robux_trader, self.robuxAmount))
+        self.tixEarlyCancel.stateChanged.connect(partial(self.early_cancel_pressed, self.tix_trader))
+        self.robuxEarlyCancel.stateChanged.connect(partial(self.early_cancel_pressed, self.robux_trader))
+        # Spin box
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
         # Config
@@ -59,14 +63,18 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         config.read('config.ini')
 
         tix_settings = config['TixTrader']
-        self.tixSplitTrades.setChecked(tix_settings.getboolean('split_trades'))
-        self.tixAmount.setValue(int(tix_settings['amount_to_trade']))
-        self.tixTradeAll.setChecked(tix_settings.getboolean('trade_all'))
+        if tix_settings:
+            self.tixSplitTrades.setChecked(tix_settings.getboolean('split_trades'))
+            self.tixAmount.setValue(int(tix_settings['amount_to_trade']))
+            self.tixTradeAll.setChecked(tix_settings.getboolean('trade_all'))
+            self.tixEarlyCancel.setChecked(tix_settings.getboolean('early_cancel'))
 
         robux_settings = config['RobuxTrader']
-        self.robuxSplitTrades.setChecked(robux_settings.getboolean('split_trades'))
-        self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
-        self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
+        if robux_settings:
+            self.robuxSplitTrades.setChecked(robux_settings.getboolean('split_trades'))
+            self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
+            self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
+            self.robuxEarlyCancel.setChecked(robux_settings.getboolean('early_cancel'))
 
     def save_config(self):
         config = configparser.ConfigParser()
@@ -76,11 +84,13 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         tix_settings['split_trades'] = str(self.tixSplitTrades.isChecked())
         tix_settings['amount_to_trade'] = str(self.tixAmount.value())
         tix_settings['trade_all'] = str(self.tixTradeAll.isChecked())
+        tix_settings['early_cancel'] = str(self.tixEarlyCancel.isChecked())
 
         robux_settings = config['RobuxTrader']
         robux_settings['split_trades'] = str(self.robuxSplitTrades.isChecked())
         robux_settings['amount_to_trade'] = str(self.robuxAmount.value())
         robux_settings['trade_all'] = str(self.robuxTradeAll.isChecked())
+        robux_settings['early_cancel'] = str(self.robuxEarlyCancel.isChecked())
         try:
             with open('config.ini', 'r+') as configfile:
                 config.write(configfile)
@@ -171,6 +181,9 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         else:
             amount_box.setEnabled(True)
             trader.set_config('trade_all', False)
+
+    def early_cancel_pressed(self, trader, state):
+        trader.set_config('early_cancel', state == 2)
 
     def assign_thread(self, obj):
         thread = QtCore.QThread()
