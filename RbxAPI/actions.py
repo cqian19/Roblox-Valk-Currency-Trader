@@ -247,7 +247,7 @@ class Trader(QtCore.QObject):
 
     def cancel_trades(self):
         """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
-        trade_count = get_trade_count()
+        trade_count = self.get_trade_count()
         if self.current_trade:
             self.update_current_trade()
             self.current_trade = None
@@ -395,7 +395,7 @@ class TixTrader(Trader):
 
     def check_trade_gap(self):
         self.check_bot_stopped()
-        if self.early_cancel and self.current_trade and self.holds_top_trade:
+        if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
@@ -426,9 +426,10 @@ class TixTrader(Trader):
 
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Tests if the rate is better than the last rate"""
+        print(rate)
         last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
-        if rate - this_top_rate >= tgap:
+        if rate - this_top_rate >= tgap - .00001:
             raise TradeGapError
         if last_rate and rate >= last_rate:
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
@@ -482,7 +483,10 @@ class TixTrader(Trader):
         self.submit_trade(to_trade, receive)
 
         rates.current_tix_rate = rate
-        if round_down(rate) >= self.get_currency_rate():
+        if self.holds_top_trade:
+            if round_down(rate) >= self.get_next_rate():
+                self.last_trade_time = time.time()
+        elif round_down(rate) >= self.get_currency_rate():
             self.last_trade_time = time.time()
 
         self.check_bot_stopped()
@@ -563,7 +567,7 @@ class RobuxTrader(Trader):
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
         self.check_bot_stopped()
-        if self.early_cancel and self.current_trade and self.holds_top_trade:
+        if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.start_rate - self.current_trade.current_rate
@@ -647,7 +651,10 @@ class RobuxTrader(Trader):
         self.submit_trade(to_trade, receive)
 
         rates.current_robux_rate = rate
-        if round_down(rate) <= self.get_currency_rate():
+        if self.holds_top_trade:
+            if self.round_down(rate) <= self.get_next_rate():
+                self.last_trade_time = time.time()
+        elif round_down(rate) <= self.get_currency_rate():
             self.last_trade_time = time.time()
 
         self.check_bot_stopped()
