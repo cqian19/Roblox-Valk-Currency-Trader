@@ -4,7 +4,7 @@ from requests_futures.sessions import FuturesSession
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
-from .utils import round_down, round_up, to_num, find_data_file
+from .utils import round_down, round_up, to_num, find_data_file, profile
 
 import time
 import logging
@@ -294,6 +294,8 @@ class Trader(QtCore.QObject):
         if not self.started:
             raise BotStoppedError
 
+    # Uncomment below for testing speed/optimization
+    # @profile
     def start(self):
         self.started = True
         while self.started:

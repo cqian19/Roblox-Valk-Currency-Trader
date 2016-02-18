@@ -7,6 +7,7 @@ import cProfile
 from functools import wraps
 
 def profile(func):
+    """Prints out all calls and times per call in function."""
     pr = cProfile.Profile()
     def _decorator(*args, **kwargs):
         pr.enable()
@@ -14,7 +15,7 @@ def profile(func):
         pr.disable()
         pr.print_stats()
     return wraps(func)(_decorator)
-    
+
 def round_down(num):
     return math.floor(num*1000)/1000.0
 
