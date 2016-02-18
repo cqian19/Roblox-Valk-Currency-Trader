@@ -2,7 +2,19 @@
 import sys
 import os
 import math
+import cProfile
 
+from functools import wraps
+
+def profile(func):
+    pr = cProfile.Profile()
+    def _decorator(*args, **kwargs):
+        pr.enable()
+        res =func(*args, **kwargs)
+        pr.disable()
+        pr.print_stats()
+    return wraps(func)(_decorator)
+    
 def round_down(num):
     return math.floor(num*1000)/1000.0
 

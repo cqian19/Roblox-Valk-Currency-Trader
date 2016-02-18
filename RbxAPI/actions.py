@@ -1,5 +1,6 @@
 from PySide import QtCore
 from lxml import html
+from requests_futures.sessions import FuturesSession
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
@@ -11,7 +12,6 @@ import math
 import requests
 import os
 import sys
-import cProfile
 
 from requests.packages.urllib3.util import Retry
 
@@ -22,7 +22,7 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .07  # Second delay between calculating trades.
+delay = .1  # Second delay between calculating trades.
 rgap = .005 # Max gap before cancelling a robux split trade
 tgap = .0025 # Max gap before cancelling a tix split trade
 reset_time = 200 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
@@ -33,6 +33,8 @@ os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
 session = requests.Session()
 session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.5)))
 session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.3)))
+session = FuturesSession(session=session, max_workers=15)
+
 # Storing variables since they can't be stored in QObject
 class RateHandler():
     last_tix_rate = 0.0
@@ -88,7 +90,7 @@ class Trader(QtCore.QObject):
             self.cancel_trades()
 
     def refresh(self):
-        r = session.get(TC_URL)
+        r = session.get(TC_URL).result()
         self.last_tree = html.fromstring(r.text)
 
     def get_raw_data(self, d, unpack=True):
@@ -197,7 +199,7 @@ class Trader(QtCore.QObject):
                 amount = our_money
         else:
             amount = self.config['amount']
-            if not amount or amount > self.get_currency() + self.get_trade_remainder():
+            if not amount or amount > our_money + self.get_trade_remainder():
                 raise NoMoneyError(self.currency)
         return amount
 
@@ -332,7 +334,8 @@ class Trader(QtCore.QObject):
             except Exception as e:
                 logging.error(e)
                 raise e
-
+        # pr.print_stats(sort='cumulative')
+    
     def stop(self):
         self.started = False
         print("Stopping trades.")
@@ -362,8 +365,9 @@ class TixTrader(Trader):
             raise requests.exceptions.ConnectionError
         rate_split = [x for x in info.split(' ') if x and x[0].isdigit()]
         # If the trader is @ Market
-        #if len(rate_split) <= 1:
-        #    raise MarketTraderError
+        if len(rate_split) <= 1:
+            print("ERROR", rate_split, i)
+            raise MarketTraderError
         tix, all_rate = to_num(rate_split[0]), rate_split[1]
         rate = float(all_rate.split(':')[0])
         return tix, rate
@@ -407,8 +411,7 @@ class TixTrader(Trader):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
         self.check_bot_stopped()
         our_tix = self.get_trade_remainder()
-        top_tix, top_rate = self.get_top_trade_info() #  Some speed errors may occur
-        
+        top_tix, top_rate = self.get_top_trade_info()
         # Check if the top trade is not our trade
         if our_tix and our_tix != top_tix:
             self.update_current_trade(our_tix) # Update the remaining tix first
@@ -419,14 +422,13 @@ class TixTrader(Trader):
                 return True
             elif not rates.last_robux_rate and not rates.current_robux_rate and top_rate < self.get_other_rate():
                 return True
-        elif our_tix is not None:
+        elif our_tix:
             TixTrader.holds_top_trade = True
             self.update_current_trade(our_tix, top_rate)
         return False
 
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Tests if the rate is better than the last rate"""
-        print(rate)
         last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
         if rate - this_top_rate >= tgap - .00001:
@@ -436,8 +438,8 @@ class TixTrader(Trader):
         elif not last_rate:
             if not threshold_rate:
                 raise BadSpreadError
-            if round_down(rate) > threshold_rate - .0015:
-                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate-.0015)
+            if round_down(rate) > threshold_rate:
+                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate)
 
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
@@ -599,6 +601,7 @@ class RobuxTrader(Trader):
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Verifies that this is a better and profit making rate to trade at"""
         last_rate = rates.last_tix_rate
+        print(last_rate)
         logging.debug("Last tix rate: ", str(last_rate))
         if not self.holds_top_trade and this_top_rate - rate >= rgap:
             raise TradeGapError
@@ -607,8 +610,8 @@ class RobuxTrader(Trader):
         elif not last_rate:
             if not threshold_rate:
                 raise BadSpreadError
-            if round_down(rate) < threshold_rate + .0015:
-                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate+.0015)
+            if round_down(rate) < threshold_rate:
+                raise WorseRateError(self.currency, self.other_currency, rate, threshold_rate)
 
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
@@ -652,7 +655,7 @@ class RobuxTrader(Trader):
 
         rates.current_robux_rate = rate
         if self.holds_top_trade:
-            if self.round_down(rate) <= self.get_next_rate():
+            if round_down(rate) <= self.get_next_rate():
                 self.last_trade_time = time.time()
         elif round_down(rate) <= self.get_currency_rate():
             self.last_trade_time = time.time()
@@ -667,6 +670,6 @@ def test_login(user, pw):
         'username': user,
         'password': pw,
     }
-    r = session.post(LOGIN_URL, payload)
+    r = session.post(LOGIN_URL, payload).result()
     if r.url == LOGIN_URL:
         raise LoginError
