@@ -24,6 +24,10 @@ data = {
         'trade_info_path': lambda i: ('//*[@id="CurrencyOffersPane"]/div/div[' + str(i) + ']/span/text()', 
                                       '//*[@id="CurrencyOffersPane"]/div/div[' + str(i) + ']/text()'),
     },
+    # Viewstate, EventValidation
+    'VIEWSTATE': '//input[@name="__VIEWSTATE"]',
+    'EVENTVALIDATION': '//input[@name="__EVENTVALIDATION"]',
+    # Login data
     'username': 'username',
     'password': 'password',
     # Trade currency elements

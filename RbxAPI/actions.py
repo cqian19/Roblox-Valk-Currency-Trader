@@ -1,6 +1,8 @@
 from PySide import QtCore
 from lxml import html
+from requests.packages.urllib3.util import Retry
 from requests_futures.sessions import FuturesSession
+from functools import wraps
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
@@ -13,7 +15,6 @@ import requests
 import os
 import sys
 
-from requests.packages.urllib3.util import Retry
 
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
@@ -102,8 +103,8 @@ class Trader(QtCore.QObject):
 
     def get_auth_tools(self):
         # VIEWSTATE and EVENTVALIDATION must be from the same session
-        vsd = self.get_raw_data('//input[@name="__VIEWSTATE"]')
-        evd = self.get_raw_data('//input[@name="__EVENTVALIDATION"]')
+        vsd = self.get_raw_data(data['VIEWSTATE'])
+        evd = self.get_raw_data(data['EVENTVALIDATION'])
         if vsd == [] or evd == []:
             raise requests.exceptions.ConnectionError
         viewstate = vsd.attrib['value']
@@ -223,6 +224,7 @@ class Trader(QtCore.QObject):
                     other_threshold_rate = other_second_top_rate
         return other_threshold_rate
 
+    @check_bot_stopped
     def calculate_trade(self, amount):
         """Determines which rate to match."""
         spread = self.get_spread()
@@ -247,6 +249,16 @@ class Trader(QtCore.QObject):
                 raise OurTradeError
             return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)
 
+    @check_bot_stopped
+    def submit_trade(self, amount_to_give, amount_to_receive):
+        vs, ev = self.get_auth_tools()
+        self.trade_payload[data['split_trades']] = self.config['split_trades']
+        self.trade_payload[data['give_box']] = str(amount_to_give)
+        self.trade_payload[data['receive_box']] = str(amount_to_receive)
+        self.trade_payload['__EVENTVALIDATION'] = ev
+        self.trade_payload['__VIEWSTATE'] = vs
+        session.post(TC_URL, data=self.trade_payload)
+
     def cancel_trades(self):
         """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
         trade_count = self.get_trade_count()
@@ -268,15 +280,6 @@ class Trader(QtCore.QObject):
         else:
             rates.current_robux_rate = 0
 
-    def submit_trade(self, amount_to_give, amount_to_receive):
-        vs, ev = self.get_auth_tools()
-        self.trade_payload[data['split_trades']] = self.config['split_trades']
-        self.trade_payload[data['give_box']] = str(amount_to_give)
-        self.trade_payload[data['receive_box']] = str(amount_to_receive)
-        self.trade_payload['__EVENTVALIDATION'] = ev
-        self.trade_payload['__VIEWSTATE'] = vs
-        session.post(TC_URL, data=self.trade_payload)
-
     def check_no_recent_trades(self):
         """If the trader hasn't traded in a while, reset both rates so the bot 
         could possibly trade at a worse rate but gain in the long run."""
@@ -290,16 +293,34 @@ class Trader(QtCore.QObject):
             else:
                 self.last_trade_time = now
 
-    def check_bot_stopped(self):
-        if not self.started:
-            raise BotStoppedError
+    def check_bot_stopped(func):
+        """Decorator that checks if bot has been stopped by user"""
+        @wraps(func)
+        def raise_if_stopped(inst, *args, **kwargs):
+            if not inst.started:
+                raise BotStoppedError
+            return func(inst, *args, **kwargs)
+        return raise_if_stopped
+
+    def do_trade(self):
+        amount = self.get_amount_to_trade()
+        to_trade, receive, rate = self.calculate_trade(amount)
+        if self.check_trades():
+            self.cancel_trades()
+        self.submit_trade(to_trade, receive)
+
+        rates.current_robux_rate = rate
+        self.update_last_trade_time()
+
+        new_trade = Trade(to_trade, receive, self.currency, self.other_currency, rate)
+        self.current_trade = new_trade
+        self.trade_log.add_trade(new_trade)
 
     # Uncomment below for testing speed/optimization
     # @profile
     def start(self):
         self.started = True
         while self.started:
-            test_time = time.time()
             time.sleep(delay)
             try:
                 self.refresh()
@@ -326,17 +347,14 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
-                #time.sleep(10)
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError) as e:
                 logging.debug(e)
             except (ZeroDivisionError) as e:
                 logging.debug(e)
-                #time.sleep(1)
             except Exception as e:
                 logging.error(e)
                 raise e
-        # pr.print_stats(sort='cumulative')
     
     def stop(self):
         self.started = False
@@ -360,7 +378,7 @@ class TixTrader(Trader):
 
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade from the available tix column"""
-         # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
+        # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
         trade_info = data['Tickets']['trade_info_path'](i)
         info = self.get_raw_data(trade_info) # May be None if connection is reset
         if not info:
@@ -466,6 +484,13 @@ class TixTrader(Trader):
         self.test_rate(actual_rate, this_top_rate, threshold_rate)
         return to_trade, receive, actual_rate
 
+    def update_last_trade_time(self):
+        if self.holds_top_trade:
+            if round_down(rate) >= self.get_next_rate():
+                self.last_trade_time = time.time()
+        elif round_down(rate) >= self.get_currency_rate():
+            self.last_trade_time = time.time()
+
     def fully_complete_trade(self):
         completed_trade = self.current_trade
         if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
@@ -475,29 +500,6 @@ class TixTrader(Trader):
             self.current_trade = None
             return True
         return False
-
-    def do_trade(self):
-        amount = self.get_amount_to_trade()
-        self.check_bot_stopped()
-        to_trade, receive, rate = self.calculate_trade(amount)
-        self.check_bot_stopped()
-        if self.check_trades(): # Trade may not be detected due to server delay
-            self.cancel_trades()
-        self.check_bot_stopped()
-        self.submit_trade(to_trade, receive)
-
-        rates.current_tix_rate = rate
-        if self.holds_top_trade:
-            if round_down(rate) >= self.get_next_rate():
-                self.last_trade_time = time.time()
-        elif round_down(rate) >= self.get_currency_rate():
-            self.last_trade_time = time.time()
-
-        self.check_bot_stopped()
-        new_trade = Trade(to_trade, receive, 'Tickets', 'Robux', rate)
-        self.current_trade = new_trade
-        self.trade_log.add_trade(new_trade)
-
 
 class RobuxTrader(Trader):
     """Trades from robux to tix"""
@@ -632,6 +634,13 @@ class RobuxTrader(Trader):
         self.test_rate(actual_rate, this_top_rate, threshold_rate)
         return to_trade, receive, actual_rate
 
+    def update_last_trade_time(self):
+        if self.holds_top_trade:
+            if round_down(rate) <= self.get_next_rate():
+                self.last_trade_time = time.time()
+        elif round_down(rate) <= self.get_currency_rate():
+            self.last_trade_time = time.time()
+
     def fully_complete_trade(self):
         completed_trade = self.current_trade
         if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
@@ -644,28 +653,6 @@ class RobuxTrader(Trader):
             self.current_trade = None
             return True
         return False
-
-    def do_trade(self):
-        amount = self.get_amount_to_trade()
-        self.check_bot_stopped()
-        to_trade, receive, rate = self.calculate_trade(amount)
-        self.check_bot_stopped()
-        if self.check_trades():
-            self.cancel_trades()
-        self.check_bot_stopped()
-        self.submit_trade(to_trade, receive)
-
-        rates.current_robux_rate = rate
-        if self.holds_top_trade:
-            if round_down(rate) <= self.get_next_rate():
-                self.last_trade_time = time.time()
-        elif round_down(rate) <= self.get_currency_rate():
-            self.last_trade_time = time.time()
-
-        self.check_bot_stopped()
-        new_trade = Trade(to_trade, receive, 'Robux', 'Tickets', rate)
-        self.current_trade = new_trade
-        self.trade_log.add_trade(new_trade)
 
 def test_login(user, pw):
     payload = {
