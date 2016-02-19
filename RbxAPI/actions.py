@@ -444,7 +444,7 @@ class TixTrader(Trader):
         logging.debug("Last robux rate: ", str(last_rate))
         if rate - this_top_rate >= tgap - .00001:
             raise TradeGapError
-        if last_rate and rate >= last_rate:
+        if last_rate and rate >= round_up(last_rate): # Rounding up may cause loss at up to 4th decimal point
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
             if not threshold_rate:
