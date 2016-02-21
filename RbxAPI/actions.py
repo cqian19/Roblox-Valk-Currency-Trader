@@ -309,13 +309,11 @@ class Trader(QtCore.QObject):
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
         if now - self.last_traded_time > RESET_TIME:
+            self.last_traded_time = now
             if not self.my_trader.holds_top_trade:
                 print('No recent')
-                self.last_traded_time = now
-                rates.last_tix_rate = 0
-                rates.last_robux_rate = 0
-            else:
-                self.last_traded_time = now
+                return True
+        return False
 
     def do_trade(self):
         amount = self.get_amount_to_trade()
@@ -420,6 +418,10 @@ class TixTrader(Trader):
         elif self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
 
+    def check_no_recent_trades(self):
+        if super().check_no_recent_trades():
+            rates.last_tix_rate = 0
+
     def check_trade_gap(self):
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_ith_trade_rate(2)
@@ -508,6 +510,25 @@ class RobuxTrader(Trader):
         self.my_trader = RobuxTrader
         self.other_trader = TixTrader
 
+    def get_available_trade_info(self, i):
+        """Parses the trade information string of the ith trade in the available robux column"""
+        if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
+            i += 1
+
+        trade_info = self.get_ith_trade_path(i, 'Robux')
+        amount_info = self.get_raw_data(trade_info[0])
+        # Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
+        rate_info = self.get_raw_data(trade_info[1])
+        if not amount_info or not rate_info:
+            raise requests.exceptions.ConnectionError
+        robux = to_num(amount_info)
+        # Gets the 1:rate\r\n part
+        all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
+        # Gets the rate part
+        rate = (all_rate[0].split(':')[1]).split('\\')[0]
+        rate = float(rate)
+        return robux, rate
+
     def update_current_trade(self, amount_remain=None, top_rate=None):
         """If a current trade is active, update its information for the trade log."""
         if amount_remain is None:
@@ -527,6 +548,10 @@ class RobuxTrader(Trader):
         elif self.current_trade:
             self.fully_complete_trade()
 
+    def check_no_recent_trades(self):
+        if super().check_no_recent_trades():
+            rates.last_tix_rate = 0
+
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
         trade_info_path = self.get_ith_trade_path(1, 'Robux') # Gets top robux trade xpath
@@ -536,25 +561,6 @@ class RobuxTrader(Trader):
             raise requests.exceptions.ConnectionError
         rate_info = trade_info[1]
         return 'Market' in rate_info
-
-    def get_available_trade_info(self, i):
-        """Parses the trade information string of the ith trade in the available robux column"""
-        if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
-            i += 1
-
-        trade_info = self.get_ith_trade_path(i, 'Robux')
-        amount_info = self.get_raw_data(trade_info[0])
-        # Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
-        rate_info = self.get_raw_data(trade_info[1])
-        if not amount_info or not rate_info:
-            raise requests.exceptions.ConnectionError
-        robux = to_num(amount_info)
-        # Gets the 1:rate\r\n part
-        all_rate = [x for x in rate_info[1].split(' ') if x and x[0].isdigit()]
-        # Gets the rate part
-        rate = (all_rate[0].split(':')[1]).split('\\')[0]
-        rate = float(rate)
-        return robux, rate
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
@@ -619,7 +625,6 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        print(time.time() - self.last_trade_start_time)
         if completed_trade and time.time() - self.last_trade_start_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             if rates.last_robux_rate:
