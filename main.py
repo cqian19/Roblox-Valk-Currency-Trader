@@ -46,12 +46,10 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         # Spin box
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
-    # Config
+        # Config settings
         self.initialize_config()
-
-    # Start
+        # Start
         self.startButton.clicked.connect(self.start_pressed)
-
     # Trade Log
         self.last_tix_traded = self.last_robux_traded = 0
         self.trade_log.trade_added.connect(self.on_trade_added)

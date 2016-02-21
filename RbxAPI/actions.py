@@ -23,10 +23,10 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .05  # Second delay between calculating trades.
-rgap = .005 # Max gap before cancelling a robux split trade
-tgap = .0025 # Max gap before cancelling a tix split trade
-reset_time = 200 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
+DELAY = .05  # Second delay between calculating trades.
+RGAP = .005 # Max gap before cancelling a robux split trade
+TGAP = .0025 # Max gap before cancelling a tix split trade
+RESET_TIME = 200 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
 cacertpath = find_data_file('cacert.pem')
@@ -53,7 +53,8 @@ class Trader(QtCore.QObject):
         self.currency = currency
         self._current_trade = None
         self.last_tree = None
-        self.last_trade_time = time.time()
+        self.last_trade_start_time = time.time()
+        self.last_traded_time = time.time()
         self.rate_updated = False
         self.trade_payload = {
             data['give_type']: self.currency,
@@ -261,6 +262,7 @@ class Trader(QtCore.QObject):
         self.trade_payload['__EVENTVALIDATION'] = ev
         self.trade_payload['__VIEWSTATE'] = vs
         session.post(TC_URL, data=self.trade_payload)
+        self.last_trade_start_time = time.time()
 
     def cancel_trades(self):
         """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
@@ -306,14 +308,14 @@ class Trader(QtCore.QObject):
         """If the trader hasn't traded in a while, reset both rates so the bot 
         could possibly trade at a worse rate but gain in the long run."""
         now = time.time()
-        if now - self.last_trade_time > reset_time:
+        if now - self.last_traded_time > RESET_TIME:
             if not self.my_trader.holds_top_trade:
                 print('No recent')
-                self.last_trade_time = now
+                self.last_traded_time = now
                 rates.last_tix_rate = 0
                 rates.last_robux_rate = 0
             else:
-                self.last_trade_time = now
+                self.last_traded_time = now
 
     def do_trade(self):
         amount = self.get_amount_to_trade()
@@ -333,7 +335,7 @@ class Trader(QtCore.QObject):
     def start(self):
         self.started = True
         while self.started:
-            time.sleep(delay)
+            time.sleep(DELAY)
             try:
                 self.refresh()
                 self.check_no_recent_trades()
@@ -357,7 +359,6 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
-                raise e
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError, ZeroDivisionError) as e:
                 logging.debug(e)
@@ -413,7 +414,7 @@ class TixTrader(Trader):
                     start_rate = self.current_trade.start_rate
                     rates.last_tix_rate = max(start_rate, rates.last_tix_rate)
                     self.rate_updated = True
-                    self.last_trade_time = time.time()
+                    self.last_traded_time = time.time()
                 self.current_trade.update(amount_remain, top_rate)
                 rates.current_tix_rate = self.current_trade.current_rate
         elif self.current_trade:  #  Trade is complete.
@@ -425,7 +426,7 @@ class TixTrader(Trader):
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff >= tgap - .00001 or ntdiff >= tgap - .00001: # Float stuff
+            if startdiff >= TGAP - .00001 or ntdiff >= TGAP - .00001: # Float stuff
                 self.do_trade()
 
     def check_better_rate(self):
@@ -451,9 +452,9 @@ class TixTrader(Trader):
         """Tests if the rate is better than the last rate"""
         last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
-        if rate - this_top_rate >= tgap - .00001:
+        if rate - this_top_rate >= TGAP - .00001:
             raise TradeGapError
-        if last_rate and rate >= round_up(last_rate): # Rounding up may cause loss at up to 4th decimal point
+        if last_rate and rate > round_up(last_rate): # Rounding up may cause loss at up to 4th decimal point
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
             if not threshold_rate:
@@ -485,7 +486,7 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_start_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
             rates.current_tix_rate = 0
@@ -520,7 +521,7 @@ class RobuxTrader(Trader):
                     else:
                         rates.last_robux_rate = start_rate
                     self.rate_updated = True
-                    self.last_trade_time = time.time()
+                    self.last_traded_time = time.time()
                 self.current_trade.update(amount_remain, top_rate)
                 rates.current_robux_rate = self.current_trade.current_rate
         elif self.current_trade:
@@ -563,7 +564,7 @@ class RobuxTrader(Trader):
             startdiff = self.current_trade.start_rate - self.current_trade.current_rate
             ntdiff = next_rate - self.current_trade.current_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if startdiff >= rgap - .000001 or ntdiff >= rgap - .000001: # Float stuff
+            if startdiff >= RGAP - .000001 or ntdiff >= RGAP - .000001: # Float stuff
                 self.do_trade()
 
     def check_better_rate(self):
@@ -590,7 +591,7 @@ class RobuxTrader(Trader):
         """Verifies that this is a better and profit making rate to trade at"""
         last_rate = rates.last_tix_rate
         logging.debug("Last tix rate: ", str(last_rate))
-        if not self.holds_top_trade and this_top_rate - rate >= rgap:
+        if not self.holds_top_trade and this_top_rate - rate >= RGAP:
             raise TradeGapError
         if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
@@ -618,7 +619,8 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        print(time.time() - self.last_trade_start_time)
+        if completed_trade and time.time() - self.last_trade_start_time > 1: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
