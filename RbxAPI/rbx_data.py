@@ -5,22 +5,24 @@ data = {
     'Tickets': {
         'current': '//*[@id="nav-tix-balance"]/text()',
         'open_trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/*[@class="TileGroup"]',
-        'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenBids$OpenBidsListView$ctrl' + str(i) + '$ctl00$CancelBidButton',
+        # Starts at index 1
+        'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenBids$OpenBidsListView$ctrl' + str(i-1) + '$ctl00$CancelBidButton',
         'trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/div[1][@class="NoResults"]/text()',
         'trade_info': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[2]/td[1]/text()',
-        # Starts at index 0
-        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[' + str(2 + i) + ']/td[2]/text()',
+        # Starts at index 1
+        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[' + str(i+1) + ']/td[2]/text()',
         # Starts at index 1
         'trade_info_path': lambda i: '//*[@id="CurrencyBidsPane"]/div/div[' + str(i) +']/text()',
     },
     'Robux': {
         'current': '//*[@id="nav-robux-balance"]/text()',
         'open_trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/*[@class="TileGroup"]',
-        'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenOffers$OpenOffersListView$ctrl' + str(i) + '$ctl00$CancelOfferButton',
+        # Starts at index 1
+        'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenOffers$OpenOffersListView$ctrl' + str(i-1) + '$ctl00$CancelOfferButton',
         'trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/div[1][@class="NoResults"]/text()',
         'trade_info': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[2]/td[1]/text()',
-        # Starts at index 0
-        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[' + str(2 + i) + ']/td[2]/text()',
+        # Starts at index 1
+        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[' + str(i+1) + ']/td[2]/text()',
         # Format: <div><span>robuxtext</span> @ rate </div>: 
         # Starts at index 1
         'trade_info_path': lambda i: ('//*[@id="CurrencyOffersPane"]/div/div[' + str(i) + ']/span/text()', 

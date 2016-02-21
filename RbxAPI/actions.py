@@ -121,7 +121,8 @@ class Trader(QtCore.QObject):
         spread = self.get_raw_data(data['spread'])
         return float(spread)
 
-    def get_trade_remainder(self, index = 0):
+    def get_trade_remainder(self, index=1):
+        """Gets remainder of our trade at index (Starting at index = 1)"""
         rem_str = self.get_raw_data(data[self.currency]['trade_remainder'](index))
         if rem_str:
             return to_num(rem_str)
@@ -158,33 +159,23 @@ class Trader(QtCore.QObject):
         return trade_count
 
     def get_trade_info(self, index):
-        """Gets the trade info starting from the top (index = 1)"""
+        """Gets the trade info starting from the top (index = 0)"""
         return self.get_available_trade_info(index)
 
-    def get_top_trade_info(self):
-        """Returns the currency amount and rate of the top available trade in this currency"""
-        return self.get_trade_info(1)
+    # All lambda data functions starts at index 1
+    def get_ith_trade_amount(self, index):
+        return self.get_trade_info(index)[0]
 
-    def get_next_top_trade_info(self):
-        """Returns the currency amount and rate of the second top available trade in this currency"""
-        return self.get_trade_info(2)
+    def get_ith_trade_rate(self, index):
+        return self.get_trade_info(index)[1]
 
-    def get_third_top_trade_info(self):
-        return self.get_trade_info(3)
+    def get_ith_trade_path(self, index, currency=None):
+        if not currency:
+            currency = self.currency
+        return data[currency]['trade_info_path'](index)
 
-    def get_top_amount(self):
-        return self.get_top_trade_info()[0]
-
-    def get_next_amount(self):
-        """Returns the amount of currency being traded in the second top trade in the category"""
-        return self.get_next_top_trade_info()[0]
-
-    def get_next_rate(self):
-        """Returns the rate of the second top trade in the category"""
-        return self.get_next_top_trade_info()[1]
-
-    def get_third_rate(self):
-        return self.get_third_top_trade_info()[1]
+    def get_ith_cancel_bid(self, index):
+        return data[self.currency]['cancel_bid'](index)
 
     def get_amount_to_trade(self):
         our_money = self.get_currency()
@@ -237,7 +228,7 @@ class Trader(QtCore.QObject):
     def calculate_trade(self, amount):
         """Determines which rate to match."""
         spread = self.get_spread()
-        this_top_rate, second_top_rate, third_top_rate = self.get_currency_rate(), self.get_next_rate(), self.get_third_rate()
+        this_top_rate, second_top_rate, third_top_rate = (self.get_ith_trade_rate(i) for i in range(1, 4))
         # Check if our trade is top trade
         if self.holds_top_trade:
             rate, next_rate = second_top_rate, third_top_rate
@@ -257,7 +248,7 @@ class Trader(QtCore.QObject):
             if self.current_trade and not self.holds_top_trade:
                 our_amount = self.get_trade_remainder()
                 # Check if trade has not gone through on Roblox's server
-                if our_amount == 0 or self.get_next_amount() == our_amount:
+                if our_amount == 0 or self.get_ith_trade_amount(2) == our_amount:
                     raise OurTradeError
             return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)
 
@@ -278,9 +269,8 @@ class Trader(QtCore.QObject):
             self.update_current_trade()
             self.current_trade = None
         for i in range(trade_count, 0, -1):
-            index = i - 1
             payload = {
-                '__EVENTTARGET': data[self.currency]['cancel_bid'](index) # lambda starts at 0 index
+                '__EVENTTARGET': self.get_ith_cancel_bid(i)
             }
             #Cancelling top trade ()
             vs, ev = self.get_auth_tools()
@@ -298,12 +288,11 @@ class Trader(QtCore.QObject):
             trade_count = self.get_trade_count()
             detected = False
             for i in range(trade_count, 0, -1):
-                index = i - 1
                 payload = {
-                    '__EVENTTARGET': data[self.currency]['cancel_bid'](index) # lambda starts at 0 index
+                    '__EVENTTARGET': self.get_ith_cancel_bid(i)
                 }
-                remainder = self.get_trade_remainder(index)
-                if self.get_trade_remainder(index) != self.current_trade.remaining1 or detected:
+                remainder = self.get_trade_remainder(i)
+                if self.get_trade_remainder(i) != self.current_trade.remaining1 or detected:
                     vs, ev = self.get_auth_tools()
                     payload['__EVENTVALIDATION'] = ev
                     payload['__VIEWSTATE'] = vs
@@ -368,6 +357,7 @@ class Trader(QtCore.QObject):
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
                 print("Connection interrupted")
+                raise e
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
                     TradeGapError,  NoMoneyError, OurTradeError, ZeroDivisionError) as e:
                 logging.debug(e)
@@ -399,7 +389,7 @@ class TixTrader(Trader):
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade from the available tix column"""
         # Format: '\r\n (bunch of spaces) Tix @ rate:1\r\n (bunch of spaces)'
-        trade_info = data['Tickets']['trade_info_path'](i)
+        trade_info = self.get_ith_trade_path(i, 'Tickets')
         info = self.get_raw_data(trade_info) # May be None if connection is reset
         if not info:
             raise requests.exceptions.ConnectionError
@@ -431,7 +421,7 @@ class TixTrader(Trader):
 
     def check_trade_gap(self):
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
-            next_rate = self.get_next_rate()
+            next_rate = self.get_ith_trade_rate(2)
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
@@ -441,7 +431,7 @@ class TixTrader(Trader):
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
         our_tix = self.get_trade_remainder()
-        top_tix, top_rate = self.get_top_trade_info()
+        top_tix, top_rate = self.get_trade_info(1)
         # Check if the top trade is not our trade
         if our_tix and our_tix != top_tix:
             self.update_current_trade(our_tix) # Update the remaining tix first
@@ -538,7 +528,7 @@ class RobuxTrader(Trader):
 
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
-        trade_info_path = data['Robux']['trade_info_path'](1)
+        trade_info_path = self.get_ith_trade_path(1, 'Robux') # Gets top robux trade xpath
         #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
         trade_info = self.get_raw_data(trade_info_path[1])
         if not len(trade_info):
@@ -551,7 +541,7 @@ class RobuxTrader(Trader):
         if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
             i += 1
 
-        trade_info = data['Robux']['trade_info_path'](i)
+        trade_info = self.get_ith_trade_path(i, 'Robux')
         amount_info = self.get_raw_data(trade_info[0])
         # Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n']
         rate_info = self.get_raw_data(trade_info[1])
@@ -569,7 +559,7 @@ class RobuxTrader(Trader):
         """Check if our rate is far higher than the next rate."""
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
-            next_rate = self.get_next_rate()
+            next_rate = self.get_ith_trade_rate(2)
             startdiff = self.current_trade.start_rate - self.current_trade.current_rate
             ntdiff = next_rate - self.current_trade.current_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
@@ -580,7 +570,7 @@ class RobuxTrader(Trader):
         """Check if a better rate for robux to tix exists"""
         # See rbx_data since this one is weird.
         our_robux = self.get_trade_remainder()
-        top_robux, top_rate = self.get_top_trade_info()
+        top_robux, top_rate = self.get_trade_info(1)
         # Check if the top trade is not our trade
         if our_robux and our_robux != top_robux:
             self.update_current_trade(our_robux)
