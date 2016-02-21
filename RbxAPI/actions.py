@@ -111,6 +111,22 @@ class Trader(QtCore.QObject):
         eventvalidation = evd.attrib['value']
         return viewstate, eventvalidation
 
+    def get_tolerance(self, amount):
+        """A magical method that determines the minimum % (in decimal) to trade"""
+        if amount//10 == 0:
+            return .9
+        return min(.9 + .015*math.floor(math.log(amount//10, 10)), .975)
+
+    def get_spread(self):
+        spread = self.get_raw_data(data['spread'])
+        return float(spread)
+
+    def get_trade_remainder(self, index = 0):
+        rem_str = self.get_raw_data(data[self.currency]['trade_remainder'](index))
+        if rem_str:
+            return to_num(rem_str)
+        return 0
+
     def get_currency(self):
         currency = self.get_raw_data(data[self.currency]['current'])
         amount = to_num(currency)
@@ -132,25 +148,9 @@ class Trader(QtCore.QObject):
     def get_other_rate(self):
         return self.get_currency_rate(self.other_currency)
 
-    def get_spread(self):
-        spread = self.get_raw_data(data['spread'])
-        return float(spread)
-
-    def get_tolerance(self, amount):
-        """A magical method that determines the minimum % (in decimal) to trade"""
-        if amount//10 == 0:
-            return .9
-        return min(.9 + .015*math.floor(math.log(amount//10, 10)), .975)
-
-    def get_trade_remainder(self, index = 0):
-        rem_str = self.get_raw_data(data[self.currency]['trade_remainder'](index))
-        if rem_str:
-            return to_num(rem_str)
-        return 0
-
-    def check_trades(self):
-        """Returns True if a trade is still active"""
-        return self.get_raw_data(data[self.currency]['trades']) == []
+    def get_other_next_rate(self):
+        """Returns the rate of the second top trade in the category of the other currency"""
+        return self.other_trader.get_available_trade_info(self, 2)[1]
 
     def get_trade_count(self):
         trades = list(self.get_raw_data(data[self.currency]['open_trades'], False))
@@ -186,10 +186,6 @@ class Trader(QtCore.QObject):
     def get_third_rate(self):
         return self.get_third_top_trade_info()[1]
 
-    def get_other_next_rate(self):
-        """Returns the rate of the second top trade in the category of the other currency"""
-        return self.other_trader.get_available_trade_info(self, 2)[1]
-
     def get_amount_to_trade(self):
         our_money = self.get_currency()
         if self.config['trade_all']:
@@ -223,6 +219,10 @@ class Trader(QtCore.QObject):
                 else: # No trades exist and spread is negative. Match the second best trade in this category.
                     other_threshold_rate = other_second_top_rate
         return other_threshold_rate
+
+    def check_trades(self):
+        """Returns True if a trade is still active"""
+        return self.get_raw_data(data[self.currency]['trades']) == []
 
     def check_bot_stopped(func):
         """Decorator that checks if bot has been stopped by user"""
@@ -293,6 +293,7 @@ class Trader(QtCore.QObject):
             rates.current_robux_rate = 0
 
     def cancel_other_trades(self):
+        """Cancels all trades except the current trade"""
         if self.current_trade:
             trade_count = self.get_trade_count()
             detected = False
@@ -309,6 +310,8 @@ class Trader(QtCore.QObject):
                     session.post(TC_URL, data=payload)
                 else:
                     detected = True
+        else:
+            self.cancel_trades()
 
     def check_no_recent_trades(self):
         """If the trader hasn't traded in a while, reset both rates so the bot 
