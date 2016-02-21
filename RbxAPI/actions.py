@@ -23,7 +23,7 @@ logging.basicConfig(
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
-delay = .1  # Second delay between calculating trades.
+delay = .05  # Second delay between calculating trades.
 rgap = .005 # Max gap before cancelling a robux split trade
 tgap = .0025 # Max gap before cancelling a tix split trade
 reset_time = 200 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
@@ -142,8 +142,8 @@ class Trader(QtCore.QObject):
             return .9
         return min(.9 + .015*math.floor(math.log(amount//10, 10)), .975)
 
-    def get_trade_remainder(self):
-        rem_str = self.get_raw_data(data[self.currency]['trade_remainder'])
+    def get_trade_remainder(self, index = 0):
+        rem_str = self.get_raw_data(data[self.currency]['trade_remainder'](index))
         if rem_str:
             return to_num(rem_str)
         return 0
@@ -292,6 +292,24 @@ class Trader(QtCore.QObject):
         else:
             rates.current_robux_rate = 0
 
+    def cancel_other_trades(self):
+        if self.current_trade:
+            trade_count = self.get_trade_count()
+            detected = False
+            for i in range(trade_count, 0, -1):
+                index = i - 1
+                payload = {
+                    '__EVENTTARGET': data[self.currency]['cancel_bid'](index) # lambda starts at 0 index
+                }
+                remainder = self.get_trade_remainder(index)
+                if self.get_trade_remainder(index) != self.current_trade.remaining1 or detected:
+                    vs, ev = self.get_auth_tools()
+                    payload['__EVENTVALIDATION'] = ev
+                    payload['__VIEWSTATE'] = vs
+                    session.post(TC_URL, data=payload)
+                else:
+                    detected = True
+
     def check_no_recent_trades(self):
         """If the trader hasn't traded in a while, reset both rates so the bot 
         could possibly trade at a worse rate but gain in the long run."""
@@ -334,7 +352,7 @@ class Trader(QtCore.QObject):
                     else:
                         self.do_trade()
                 elif self.get_trade_count() > 1: #Lag error? Better clean it up.
-                    self.cancel_trades()
+                    self.cancel_other_trades()
                 elif self.current_trade:
                     if self.check_better_rate():
                         self.do_trade()
@@ -343,7 +361,6 @@ class Trader(QtCore.QObject):
                 else:
                     self.cancel_trades()
             except BotStoppedError:
-                self.cancel_trades()
                 break
             except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as e:
                 print(e)
@@ -354,7 +371,8 @@ class Trader(QtCore.QObject):
             except Exception as e:
                 logging.error(e)
                 raise e
-    
+        self.cancel_trades()
+
     def stop(self):
         self.started = False
         print("Stopping trades.")
@@ -398,7 +416,7 @@ class TixTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if amount_remain < .99*self.current_trade.amount1 and not self.rate_updated:
+                if not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.last_tix_rate = max(start_rate, rates.last_tix_rate)
                     self.rate_updated = True
@@ -409,7 +427,6 @@ class TixTrader(Trader):
             self.fully_complete_trade()
 
     def check_trade_gap(self):
-        self.check_bot_stopped()
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_next_rate()
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
@@ -420,7 +437,6 @@ class TixTrader(Trader):
 
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
-        self.check_bot_stopped()
         our_tix = self.get_trade_remainder()
         top_tix, top_rate = self.get_top_trade_info()
         # Check if the top trade is not our trade
@@ -454,7 +470,6 @@ class TixTrader(Trader):
 
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
-        self.check_bot_stopped()
         x, best_x = amount, 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
@@ -505,7 +520,7 @@ class RobuxTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if amount_remain <= .99*self.current_trade.amount1 and not self.rate_updated:
+                if not self.rate_updated:
                     start_rate = self.current_trade.start_rate 
                     if rates.last_robux_rate:
                         rates.last_robux_rate = min(start_rate, rates.last_robux_rate)
@@ -549,7 +564,6 @@ class RobuxTrader(Trader):
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
-        self.check_bot_stopped()
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_next_rate()
@@ -595,7 +609,6 @@ class RobuxTrader(Trader):
 
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, and the corresponding tix to receive"""
-        self.check_bot_stopped()
         x, closest, best_x = amount, sys.maxsize, 0
         # Trade within .001 of top rate, or lower if the last tix rate is within .001 of top rate
         tolerance = self.get_tolerance(amount)

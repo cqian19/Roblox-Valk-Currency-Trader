@@ -8,8 +8,9 @@ data = {
         'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenBids$OpenBidsListView$ctrl' + str(i) + '$ctl00$CancelBidButton',
         'trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/div[1][@class="NoResults"]/text()',
         'trade_info': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[2]/td[1]/text()',
-        'trade_remainder': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[2]/td[2]/text()',
-        # Starts at index 1
+        # Starts at index 0
+        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenBids_OpenBidsUpdatePanel"]/table/tr[' + str(2 + i) + ']/td[2]/text()',
+        # Starts at index 0
         'trade_info_path': lambda i: '//*[@id="CurrencyBidsPane"]/div/div[' + str(i) +']/text()',
     },
     'Robux': {
@@ -18,9 +19,10 @@ data = {
         'cancel_bid': lambda i: 'ctl00$ctl00$cphRoblox$cphMyRobloxContent$ctl00$OpenOffers$OpenOffersListView$ctrl' + str(i) + '$ctl00$CancelOfferButton',
         'trades': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/div[1][@class="NoResults"]/text()',
         'trade_info': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[2]/td[1]/text()',
-        'trade_remainder': '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[2]/td[2]/text()',
+        # Starts at index 0
+        'trade_remainder': lambda i: '//*[@id="ctl00_ctl00_cphRoblox_cphMyRobloxContent_ctl00_OpenOffers_OpenOffersUpdatePanel"]/table/tr[' + str(2 + i) + ']/td[2]/text()',
         # Format: <div><span>robuxtext</span> @ rate </div>: 
-        # Starts at index 1
+        # Starts at index 0
         'trade_info_path': lambda i: ('//*[@id="CurrencyOffersPane"]/div/div[' + str(i) + ']/span/text()', 
                                       '//*[@id="CurrencyOffersPane"]/div/div[' + str(i) + ']/text()'),
     },

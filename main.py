@@ -23,18 +23,17 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         self.setupUi(self)
 
         self.started = False
-        # Traders
+    # Traders
         self.trade_log = TradeLog()
         self.tix_trader = TixTrader(self.trade_log)
         self.robux_trader = RobuxTrader(self.trade_log)
         self.tix_thread = self.assign_thread(self.tix_trader)
         self.robux_thread = self.assign_thread(self.robux_trader)
-
-        # Login screen
+    # Login screen
         self.usernameField.returnPressed.connect(self.login_pressed)
         self.passwordField.returnPressed.connect(self.login_pressed)
         self.loginButton.clicked.connect(self.login_pressed)
-        # Options
+    # Options
         # Check box
         self.tixSplitTrades.stateChanged.connect(partial(self.split_pressed, self.tix_trader))
         self.robuxSplitTrades.stateChanged.connect(partial(self.split_pressed, self.robux_trader))
@@ -47,13 +46,14 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         # Spin box
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
-        # Config
+    # Config
         self.initialize_config()
 
-        # Start
+    # Start
         self.startButton.clicked.connect(self.start_pressed)
 
-        # Trade Log
+    # Trade Log
+        self.last_tix_traded = self.last_robux_traded = 0
         self.trade_log.trade_added.connect(self.on_trade_added)
         self.trade_log.trade_completed.connect(self.on_trade_completed)
         print("Starting bot")
@@ -115,20 +115,31 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
     def on_trade_completed(self, trade):
         current = self.currentTradeTable
         target = self.pastTradesTable
-        gui_row = trade.row
-        if gui_row:
-            current.takeItem(current.row(gui_row))
+        if trade.row:
+            current.takeItem(current.row(trade.row))
+
         amount_traded = trade.amount1 - trade.remaining1
+        all_traded = amount_traded == trade.amount1
         text = ""
+
         print(trade)
-        if amount_traded == trade.amount1:  # Trade is fully completed
-            tup = (amount_traded, abbr[trade.type1],
-                   round_down(trade.start_rate), trade.amount2, abbr[trade.type2])
-            text = "{} {} @ {:.3f} for {} {} ".format(*tup)
-        elif amount_traded > 0:  # Trade cancelled but some went through
-            tup = (amount_traded, abbr[trade.type1], round_down(trade.start_rate))
-            text = "{} {} @ {:.3f} (Semi-complete)".format(*tup)
-        if text:
+        # Preventing duplicates from showing.
+        if trade.type1 == 'Tickets':  # Trade cancelled but some went through
+            if not all_traded and amount_traded == self.last_tix_traded: # Duplicate trade
+                return
+            self.last_tix_traded = amount_traded
+        elif trade.type1 == 'Robux':
+            if not all_traded and amount_traded == self.last_robux_traded: # Duplicate trade
+                return 
+            self.last_robux_traded = amount_traded 
+        if amount_traded > 0: # Some currency went through
+            if all_traded:  # Trade is fully completed
+                tup = (amount_traded, abbr[trade.type1],
+                       round_down(trade.start_rate), trade.amount2, abbr[trade.type2])
+                text = "{} {} @ {:.3f} for {} {} ".format(*tup)
+            else:
+                tup = (amount_traded, abbr[trade.type1], round_down(trade.start_rate))
+                text = "{} {} @ {:.3f} (Semi-complete)".format(*tup)
             trade.row = self.add_trade_gui(text, target)
 
     def clear_gui_log(self):
