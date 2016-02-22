@@ -43,8 +43,8 @@ class RateHandler():
     last_robux_rate = 0.0
     current_tix_rate = 0.0
     current_robux_rate = 0.0
-    past_tix_rates = deque(maxlen=10)
-    past_robux_rates = deque(maxlen=10)
+    past_tix_rates = deque(maxlen=15)
+    past_robux_rates = deque(maxlen=15)
 
 rates = RateHandler # Ghetto
 
@@ -374,8 +374,8 @@ class Trader(QtCore.QObject):
         self.cancel_trades()
 
     def stop(self):
+        print("Stopping {} trader".format(self.currency))
         self.started = False
-        print("Stopping trades.")
         self.cancel_trades()
 
 
@@ -426,10 +426,10 @@ class TixTrader(Trader):
 
     def check_no_recent_trades(self):
         if super().check_no_recent_trades():
-            rates.last_tix_rate = 0
-
+            rates.last_robux_rate = 0
+            rates.past_robux_rates.clear()
+            
     def check_trade_gap(self):
-        print("CHECK TIX GAP")
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_ith_trade_rate(2)
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
@@ -564,6 +564,7 @@ class RobuxTrader(Trader):
     def check_no_recent_trades(self):
         if super().check_no_recent_trades():
             rates.last_tix_rate = 0
+            rates.past_tix_rates.clear()
 
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
@@ -577,7 +578,6 @@ class RobuxTrader(Trader):
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
-        print("CHECK GAP")
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_ith_trade_rate(2)
