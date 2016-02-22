@@ -43,8 +43,8 @@ class RateHandler():
     last_robux_rate = 0.0
     current_tix_rate = 0.0
     current_robux_rate = 0.0
-    past_tix_rates = deque(maxlen=15)
-    past_robux_rates = deque(maxlen=15)
+    past_tix_rates = deque(maxlen=10)
+    past_robux_rates = deque(maxlen=10)
 
 rates = RateHandler # Ghetto
 
@@ -243,6 +243,10 @@ class Trader(QtCore.QObject):
                 raise BadSpreadError
             if this_top_rate <= 10:
                 raise LowRateError
+            # If we have a trade but its rate is not higher to the 4th decimal, increment the rate by .001
+            if self.current_trade and round_down(self.current_trade.current_rate) == this_top_rate:
+                rate = self.get_better_rate(rate)
+
         other_threshold_rate = self.get_threshold_rate()
         #Trade at top rate
         #If that doesn't work, try trading at the second top rate instead
@@ -411,7 +415,8 @@ class TixTrader(Trader):
                 if not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.past_tix_rates.append(start_rate)
-                    rates.last_tix_rate = max(start_rate, max(rates.past_tix_rates))
+                    now = time.time()
+                    rates.last_tix_rate = max(rates.past_tix_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
                 self.current_trade.update(amount_remain, top_rate)
@@ -424,6 +429,7 @@ class TixTrader(Trader):
             rates.last_tix_rate = 0
 
     def check_trade_gap(self):
+        print("CHECK TIX GAP")
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_ith_trade_rate(2)
             startdiff = self.current_trade.current_rate - self.current_trade.start_rate
@@ -451,6 +457,10 @@ class TixTrader(Trader):
             self.update_current_trade(our_tix, top_rate)
         return False
 
+    def get_better_rate(self, rate):
+        """Returns a rate higher than the best rate."""
+        return rate + .001
+
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Tests if the rate is better than the last rate"""
         last_rate = rates.last_robux_rate
@@ -467,7 +477,8 @@ class TixTrader(Trader):
 
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
-        x, best_x = amount, 0
+        x = amount
+        best_x = best_outside_x = 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
         # Add tolerance check
@@ -480,7 +491,7 @@ class TixTrader(Trader):
                     best_x = x
             elif not closest_within_rate and diff < closest_outside_rate: # diff >= .001
                 closest_outside_rate = diff
-                best_x = x
+                best_outside_x = x
             x -= 1
         to_trade, receive = best_x, math.floor(best_x/rate)
         actual_rate = to_trade/receive
@@ -540,7 +551,7 @@ class RobuxTrader(Trader):
                     start_rate = self.current_trade.start_rate
                     rates.past_robux_rates.append(start_rate) 
                     if rates.last_robux_rate:
-                        rates.last_robux_rate = min(start_rate, min(rates.past_robux_rates))
+                        rates.last_robux_rate = min(rates.past_robux_rates)
                     else:
                         rates.last_robux_rate = start_rate
                     self.rate_updated = True
@@ -566,6 +577,7 @@ class RobuxTrader(Trader):
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
+        print("CHECK GAP")
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_ith_trade_rate(2)
@@ -594,6 +606,10 @@ class RobuxTrader(Trader):
             RobuxTrader.holds_top_trade = True
             self.update_current_trade(our_robux, top_rate)
         return False
+
+    def get_better_rate(self, rate):
+        """Returns a rate higher than the best rate"""
+        return rate - .001
 
     def test_rate(self, rate, this_top_rate, threshold_rate):
         """Verifies that this is a better and profit making rate to trade at"""
