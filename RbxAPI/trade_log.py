@@ -9,16 +9,16 @@ logging.basicConfig(
 # logging.disable(logging.CRITICAL)
 
 
-def format_time(start, end):
-    temp = end - start
-    hours = temp//3600
-    temp = temp - 3600*hours
-    minutes = temp//60
-    seconds = temp - 60*minutes
-
-    formatted_time = '{} Hours {} Minutes {} Seconds'.format(
-        hours, minutes, round(seconds, 1))
-    return formatted_time
+def format_time(seconds):
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    ts = ""
+    if h != 0:
+        ts += "{:.0f} Hours ".format(h)
+    if m != 0:
+        ts += "{:.0f} Minutes ".format(m)
+    ts += "{:.2f} Seconds".format(s)
+    return ts
 
 abbr = {
     'Tickets': 'Tx',
@@ -55,12 +55,14 @@ class Trade(QObject):
         starttup = (self.amount1, self.type1, self.start_rate,
                     self.amount2, self.type2)
         currenttup = (self.remaining1, self.type1, self.current_rate)
-        return "\n\n" +\
+        s =    "\n" +\
                "Start: Trading {} {} @ {:.3f} for {} {}".format(*starttup) + "\n" +\
                "Current Status: Trading {} {} @ {:.3f}".format(*currenttup) + "\n" +\
                "Start time: {0}".format(self.start_time) +"\n" +\
                "Complete time: {0}".format(self.complete_time)
-
+        if self.complete_time != 'Incomplete':
+            s += "\nTime Elapsed: {0}".format(format_time((self.complete_time - self.start_time).microseconds/(1e6)))
+        return s
 
 class TradeLog(QObject):
 
