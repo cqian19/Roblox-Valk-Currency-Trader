@@ -53,10 +53,13 @@ class Trade(QObject):
 
     def __str__(self):
         starttup = (self.amount1, self.type1, self.start_rate,
-                    self.amount2, self.type2, self.start_time, self.complete_time)
+                    self.amount2, self.type2)
         currenttup = (self.remaining1, self.type1, self.current_rate)
-        return "Start: Trading {} {} @ {:.3f} for {} {} Start: {} Complete: {}".format(*starttup) + "\n" +\
-               "Current Status: Trading {} {} @ {:.3f}".format(*currenttup)
+        return "\n\n" +\
+               "Start: Trading {} {} @ {:.3f} for {} {}".format(*starttup) + "\n" +\
+               "Current Status: Trading {} {} @ {:.3f}".format(*currenttup) + "\n" +\
+               "Start time: {0}".format(self.start_time) +"\n" +\
+               "Complete time: {0}".format(self.complete_time)
 
 
 class TradeLog(QObject):

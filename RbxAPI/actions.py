@@ -27,7 +27,7 @@ logging.disable(logging.INFO)
 DELAY = .05  # Second delay between calculating trades.
 RGAP = .005 # Max gap before cancelling a robux split trade
 TGAP = .0025 # Max gap before cancelling a tix split trade
-RESET_TIME = 120 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
+RESET_TIME = 180 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 
 # Initializing requests.Session for frozen application
 cacertpath = find_data_file('cacert.pem')
@@ -302,7 +302,7 @@ class Trader(QtCore.QObject):
                     '__EVENTTARGET': self.get_ith_cancel_bid(i)
                 }
                 remainder = self.get_trade_remainder(i)
-                if self.get_trade_remainder(i) != self.current_trade.remaining1 or detected:
+                if remainder != self.current_trade.remaining1 or detected:
                     vs, ev = self.get_auth_tools()
                     payload['__EVENTVALIDATION'] = ev
                     payload['__VIEWSTATE'] = vs
@@ -415,7 +415,6 @@ class TixTrader(Trader):
                 if not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.past_tix_rates.append(start_rate)
-                    now = time.time()
                     rates.last_tix_rate = max(rates.past_tix_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
@@ -428,7 +427,7 @@ class TixTrader(Trader):
         if super().check_no_recent_trades():
             rates.last_robux_rate = 0
             rates.past_robux_rates.clear()
-            
+
     def check_trade_gap(self):
         if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
             next_rate = self.get_ith_trade_rate(2)
@@ -436,6 +435,7 @@ class TixTrader(Trader):
             ntdiff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
             if startdiff >= TGAP - .00001 or ntdiff >= TGAP - .00001: # Float stuff
+                print(startdiff, ntdiff, 'REDO tix')
                 self.do_trade()
 
     def check_better_rate(self):
@@ -478,7 +478,7 @@ class TixTrader(Trader):
     def balance_rate(self, amount, rate, this_top_rate, threshold_rate):
         """Gives a trade amount nearest the exact rate, with the highest 4th decimal place and the corresponding robux to receive"""
         x = amount
-        best_x = best_outside_x = 0
+        best_x = 0
         closest_within_rate, closest_outside_rate = 0, sys.maxsize
         # Trade within .001 of the top rate, or lower if the last robux rate is within .001 of this tix rate
         # Add tolerance check
@@ -491,7 +491,7 @@ class TixTrader(Trader):
                     best_x = x
             elif not closest_within_rate and diff < closest_outside_rate: # diff >= .001
                 closest_outside_rate = diff
-                best_outside_x = x
+                best_x = x
             x -= 1
         to_trade, receive = best_x, math.floor(best_x/rate)
         actual_rate = to_trade/receive
