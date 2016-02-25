@@ -414,6 +414,8 @@ class TixTrader(Trader):
         if not info:
             raise requests.exceptions.ConnectionError
         rate_split = [x for x in info.split(' ') if x and x[0].isdigit()]
+        if len(rate_split) < 2:
+            raise MarketTraderError
         tix, all_rate = to_num(rate_split[0]), rate_split[1]
         rate = float(all_rate.split(':')[0])
         return tix, rate
@@ -442,7 +444,6 @@ class TixTrader(Trader):
             start_diff = self.current_trade.current_rate - self.current_trade.start_rate
             nt_diff = self.current_trade.current_rate - next_rate
             #if self.current_trade.amount1 == self.current_trade.remaining1:
-            print(start_diff, nt_diff)
             if start_diff >= TGAP - .00001 or nt_diff >= TGAP - .00001: # Float stuff
                 self.do_trade()
 
@@ -451,7 +452,6 @@ class TixTrader(Trader):
         our_tix = self.get_trade_remainder()
         top_tix, top_rate = self.get_trade_info(1)
         # Check if the top trade is not our trade
-        print(rates.current_tix_rate, top_rate)
         if our_tix and our_tix != top_tix:
             self.update_current_trade(our_tix) # Update the remaining tix first
             TixTrader.holds_top_trade = False
@@ -533,7 +533,7 @@ class RobuxTrader(Trader):
 
     def set_current_rate(self, rate):
         rates.current_robux_rate = rate
-        
+
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade in the available robux column"""
         if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
@@ -572,11 +572,6 @@ class RobuxTrader(Trader):
                 rates.current_robux_rate = self.current_trade.current_rate
         elif self.current_trade:
             self.fully_complete_trade()
-
-    def check_no_recent_trades(self):
-        if super().check_no_recent_trades():
-            rates.last_tix_rate = 0
-            rates.past_tix_rates.clear()
 
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""

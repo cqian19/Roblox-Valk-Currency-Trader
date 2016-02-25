@@ -61,7 +61,7 @@ class Trade(QObject):
                "Start time: {0}".format(self.start_time) +"\n" +\
                "Complete time: {0}".format(self.complete_time)
         if self.complete_time != 'Incomplete':
-            s += "\nTime Elapsed: {0}".format(format_time((self.complete_time - self.start_time).microseconds/(1e6)))
+            s += "\nTime Elapsed: {0}".format(format_time((self.complete_time - self.start_time).total_seconds()))
         return s
 
 class TradeLog(QObject):
