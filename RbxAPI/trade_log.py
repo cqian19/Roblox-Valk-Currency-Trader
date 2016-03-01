@@ -14,9 +14,15 @@ def format_time(seconds):
     h, m = divmod(m, 60)
     ts = ""
     if h != 0:
-        ts += "{:.0f} Hours ".format(h)
+        if h > 1:
+            ts += "{:.0f} Hours ".format(h)
+        else:
+            ts += "{:.0f} Hour ".format(h)
     if m != 0:
-        ts += "{:.0f} Minutes ".format(m)
+        if m > 1:
+            ts += "{:.0f} Minutes ".format(m)
+        else:
+            ts += "{:.0f} Minute ".format(m)
     ts += "{:.2f} Seconds".format(s)
     return ts
 

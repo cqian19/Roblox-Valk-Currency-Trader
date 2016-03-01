@@ -120,7 +120,6 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         all_traded = amount_traded == trade.amount1
         text = ""
 
-        print(trade)
         # Preventing duplicates from showing.
         if trade.type1 == 'Tickets':  # Trade cancelled but some went through
             if not all_traded and amount_traded == self.last_tix_traded: # Duplicate trade
@@ -131,6 +130,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
                 return 
             self.last_robux_traded = amount_traded 
         if amount_traded > 0: # Some currency went through
+            print(trade)
             if all_traded:  # Trade is fully completed
                 tup = (amount_traded, abbr[trade.type1],
                        round_down(trade.start_rate), trade.amount2, abbr[trade.type2])

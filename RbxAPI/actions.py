@@ -200,7 +200,7 @@ class Trader(QtCore.QObject):
         """Gets the worst possible rate to trade at, so we don't go beyond it"""
         spread = self.get_spread()
         other_top_rate, other_second_top_rate = self.get_other_rate(), self.get_other_next_rate()
-        if self.holds_top_trade:
+        if self.my_trader.holds_top_trade:
             other_threshold_rate = other_top_rate
         elif spread >= 0:
             other_threshold_rate = other_top_rate
@@ -324,6 +324,7 @@ class Trader(QtCore.QObject):
                 return True
         return False
 
+    @check_bot_stopped
     def do_trade(self):
         amount = self.get_amount_to_trade()
         to_trade, receive, rate = self.calculate_trade(amount)
@@ -420,7 +421,7 @@ class TixTrader(Trader):
         rate = float(all_rate.split(':')[0])
         return tix, rate
 
-    def update_current_trade(self, amount_remain=None, top_rate=None):
+    def update_current_trade(self, amount_remain=None, rate=None):
         """If a current trade is active, update its information for the trade log."""
         logging.info('Updating trade')
         if amount_remain is None:
@@ -430,16 +431,18 @@ class TixTrader(Trader):
                 if not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.past_tix_rates.append(start_rate)
-                    rates.last_tix_rate = max(rates.past_tix_rates, default=0)
+                    rates.last_tix_rate = max(rates.past_tix_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
-                self.current_trade.update(amount_remain, top_rate)
+                    self.current_trade.update(amount_remain)    
+            if rate and rate > round_down(self.current_trade.current_rate):
+                self.current_trade.update(amount_remain, rate)
                 rates.current_tix_rate = self.current_trade.current_rate
         elif self.current_trade:  #  Trade is complete.
             self.fully_complete_trade()
 
     def check_trade_gap(self):
-        if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
+        if self.config['early_cancel'] and self.current_trade and TixTrader.holds_top_trade:
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.current_rate - self.current_trade.start_rate
             nt_diff = self.current_trade.current_rate - next_rate
@@ -553,7 +556,7 @@ class RobuxTrader(Trader):
         rate = float(rate)
         return robux, rate
 
-    def update_current_trade(self, amount_remain=None, top_rate=None):
+    def update_current_trade(self, amount_remain=None, rate=None):
         """If a current trade is active, update its information for the trade log."""
         if amount_remain is None:
             amount_remain = self.get_trade_remainder()
@@ -562,13 +565,12 @@ class RobuxTrader(Trader):
                 if not self.rate_updated:
                     start_rate = self.current_trade.start_rate
                     rates.past_robux_rates.append(start_rate) 
-                    if rates.last_robux_rate:
-                        rates.last_robux_rate = min(rates.past_robux_rates, default=0)
-                    else:
-                        rates.last_robux_rate = start_rate
+                    rates.last_robux_rate = min(rates.past_robux_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
-                self.current_trade.update(amount_remain, top_rate)
+                    self.current_trade.update(amount_remain)
+            if rate and rate < round_down(self.current_trade.current_rate):
+                self.current_trade.update(amount_remain, rate)
                 rates.current_robux_rate = self.current_trade.current_rate
         elif self.current_trade:
             self.fully_complete_trade()
@@ -585,7 +587,7 @@ class RobuxTrader(Trader):
 
     def check_trade_gap(self):
         """Check if our rate is far higher than the next rate."""
-        if self.config['early_cancel'] and self.current_trade and self.holds_top_trade:
+        if self.config['early_cancel'] and self.current_trade and RobuxTrader.holds_top_trade:
             # Get the second highest trade's info
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.start_rate - self.current_trade.current_rate
@@ -618,7 +620,7 @@ class RobuxTrader(Trader):
         """Verifies that this is a better and profit making rate to trade at"""
         last_rate = rates.last_tix_rate
         logging.debug("Last tix rate: ", str(last_rate))
-        if not self.holds_top_trade and this_top_rate - rate >= RGAP:
+        if not RobuxTrader.holds_top_trade and this_top_rate - rate >= RGAP:
             raise TradeGapError
         if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
@@ -662,6 +664,11 @@ def test_login(user, pw):
         'username': user,
         'password': pw,
     }
-    r = session.post(LOGIN_URL, payload).result()
+    def do_login():
+        return session.post(LOGIN_URL, payload).result()
+    r = do_login()
     if r.url == LOGIN_URL:
         raise LoginError
+    else:
+        global test_login
+        test_login = do_login
