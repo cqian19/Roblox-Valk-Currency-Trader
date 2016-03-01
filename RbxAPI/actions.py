@@ -537,6 +537,11 @@ class RobuxTrader(Trader):
     def set_current_rate(self, rate):
         rates.current_robux_rate = rate
 
+    def check_no_recent_trades(self):
+        if super().check_no_recent_trades():
+            rates.last_tix_rate = 0
+            rates.past_tix_rates.clear()
+
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade in the available robux column"""
         if RobuxTrader.check_at_market(self): # Top trade is @ Market, real info is at index + 1
