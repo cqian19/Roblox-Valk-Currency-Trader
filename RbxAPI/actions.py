@@ -20,15 +20,15 @@ import sys
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s -%(levelname)s %(funcName)s %(message)s  %(module)s: <Line %(lineno)s>"
 )
-
 # Enable For Debugging:
 logging.disable(logging.INFO)
 
 DELAY = .05  # Second delay between calculating trades.
 RGAP = .005 # Max gap before cancelling a robux split trade
 TGAP = .0025 # Max gap before cancelling a tix split trade
-RESET_TIME = 180 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
-
+TRADE_LAG_TIME = 1.25 # Estimate of how long it takes for Roblox to process our requests
+RESET_TIME = 240 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
+DEQUE_SIZE = 15 # Max number of past trade rates to keep track of to prevent loss
 # Initializing requests.Session for frozen application
 cacertpath = find_data_file('cacert.pem')
 os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
@@ -43,8 +43,8 @@ class RateHandler():
     last_robux_rate = 0.0
     current_tix_rate = 0.0
     current_robux_rate = 0.0
-    past_tix_rates = deque(maxlen=15)
-    past_robux_rates = deque(maxlen=15)
+    past_tix_rates = deque(maxlen=DEQUE_SIZE)
+    past_robux_rates = deque(maxlen=DEQUE_SIZE)
 
 rates = RateHandler # Ghetto
 
@@ -57,8 +57,8 @@ class Trader(QtCore.QObject):
         self.currency = currency
         self._current_trade = None
         self.last_tree = None
-        self.last_trade_start_time = time.time()
-        self.last_traded_time = time.time()
+        self.last_trade_start_time = time.time() # Time when last trade was submitted
+        self.last_traded_time = time.time() # Time when some currency actually went through
         self.rate_updated = False
         self.trade_payload = {
             data['give_type']: self.currency,
@@ -91,9 +91,6 @@ class Trader(QtCore.QObject):
 
     def set_config(self, option, value):
         self.config[option] = value
-        # Redo trades with new configuration
-        if self.started:
-            self.cancel_trades()
 
     def refresh(self):
         r = session.get(TC_URL).result()
@@ -256,8 +253,11 @@ class Trader(QtCore.QObject):
             # If the second rate is our rate, raise an error
             if self.current_trade and not self.holds_top_trade:
                 our_amount = self.get_trade_remainder()
+                second_trade_amount = self.get_ith_trade_amount(2)
                 # Check if trade has not gone through on Roblox's server
-                if our_amount == 0 or self.get_ith_trade_amount(2) == our_amount:
+                if self.current_trade.amount1 == second_trade_amount:
+                    raise OurTradeError
+                if our_amount == 0 or our_amount == second_trade_amount:
                     raise OurTradeError
             return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)
 
@@ -278,20 +278,16 @@ class Trader(QtCore.QObject):
         if self.current_trade:
             self.update_current_trade()
             self.current_trade = None
-            if self.currency == 'Tickets':
-                rates.current_tix_rate = 0
-            else:
-                rates.current_robux_rate = 0
+            self.set_current_rate(0)
         for i in range(trade_count, 0, -1):
-            payload = {
-                '__EVENTTARGET': self.get_ith_cancel_bid(i)
-            }
-            #Cancelling top trade ()
+            #Cancelling top trade
             vs, ev = self.get_auth_tools()
-            payload['__EVENTVALIDATION'] = ev
-            payload['__VIEWSTATE'] = vs
+            payload = {
+                '__EVENTTARGET': self.get_ith_cancel_bid(i),
+                '__EVENTVALIDATION': ev,
+                '__VIEWSTATE': vs
+            }
             session.post(TC_URL, data=payload)
-
 
     def cancel_other_trades(self):
         """Cancels all trades except the current trade"""
@@ -299,14 +295,14 @@ class Trader(QtCore.QObject):
             trade_count = self.get_trade_count()
             detected = False
             for i in range(trade_count, 0, -1):
-                payload = {
-                    '__EVENTTARGET': self.get_ith_cancel_bid(i)
-                }
                 remainder = self.get_trade_remainder(i)
                 if remainder != self.current_trade.remaining1 or detected:
                     vs, ev = self.get_auth_tools()
-                    payload['__EVENTVALIDATION'] = ev
-                    payload['__VIEWSTATE'] = vs
+                    payload = {
+                        '__EVENTTARGET': self.get_ith_cancel_bid(i),
+                        '__EVENTVALIDATION': ev,
+                        '__VIEWSTATE': vs
+                    }
                     session.post(TC_URL, data=payload)
                 else:
                     detected = True
@@ -428,13 +424,13 @@ class TixTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if not self.rate_updated:
+                if not self.rate_updated and time.time() - self.last_traded_time > TRADE_LAG_TIME:
                     start_rate = self.current_trade.start_rate
                     rates.past_tix_rates.append(start_rate)
                     rates.last_tix_rate = max(rates.past_tix_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
-                    self.current_trade.update(amount_remain)    
+                self.current_trade.update(amount_remain)    
             if rate and rate > round_down(self.current_trade.current_rate):
                 self.current_trade.update(amount_remain, rate)
                 rates.current_tix_rate = self.current_trade.current_rate
@@ -508,7 +504,7 @@ class TixTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_start_time > 1.25: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_start_time > TRADE_LAG_TIME: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             rates.last_tix_rate = max(completed_trade.start_rate, rates.last_tix_rate)
             rates.current_tix_rate = 0
@@ -567,13 +563,13 @@ class RobuxTrader(Trader):
             amount_remain = self.get_trade_remainder()
         if amount_remain and self.current_trade:
             if amount_remain < self.current_trade.remaining1:
-                if not self.rate_updated:
+                if not self.rate_updated and time.time() - self.last_traded_time > TRADE_LAG_TIME:
                     start_rate = self.current_trade.start_rate
                     rates.past_robux_rates.append(start_rate) 
                     rates.last_robux_rate = min(rates.past_robux_rates)
                     self.rate_updated = True
                     self.last_traded_time = time.time()
-                    self.current_trade.update(amount_remain)
+                self.current_trade.update(amount_remain)
             if rate and rate < round_down(self.current_trade.current_rate):
                 self.current_trade.update(amount_remain, rate)
                 rates.current_robux_rate = self.current_trade.current_rate
@@ -653,7 +649,7 @@ class RobuxTrader(Trader):
 
     def fully_complete_trade(self):
         completed_trade = self.current_trade
-        if completed_trade and time.time() - self.last_trade_start_time > 1.25: # Trades can be incorrectly completed due to Roblox's time to process a trade
+        if completed_trade and time.time() - self.last_trade_start_time > TRADE_LAG_TIME: # Trades can be incorrectly completed due to Roblox's time to process a trade
             completed_trade.update(0)
             if rates.last_robux_rate:
                 rates.last_robux_rate = min(completed_trade.start_rate, rates.last_robux_rate)
@@ -669,11 +665,6 @@ def test_login(user, pw):
         'username': user,
         'password': pw,
     }
-    def do_login():
-        return session.post(LOGIN_URL, payload).result()
-    r = do_login()
+    r = session.post(LOGIN_URL, payload).result()
     if r.url == LOGIN_URL:
         raise LoginError
-    else:
-        global test_login
-        test_login = do_login

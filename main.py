@@ -46,7 +46,10 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         # Spin box
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
+        self.tixThresholdRate.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
+        self.robuxThresholdRate.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
         # Config settings
+        self.save_config
         self.initialize_config()
         # Start
         self.startButton.clicked.connect(self.start_pressed)
@@ -58,39 +61,54 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
     def initialize_config(self):
         config = configparser.ConfigParser()
-        config.read('config.ini')
+        try:
+            with open('config.ini', 'r+'):
+                config.read('config.ini')
+        except (IOError, FileNotFoundError, configparser.MissingSectionHeaderError):
+            self.save_config() # Create or fix the config file
+        else:
+            if not (config.has_section('TixTrader') and config.has_section('RobuxTrader')):
+                self.save_config()
+            else:
+                tix_settings = config['TixTrader']
+                self.tixSplitTrades.setChecked(tix_settings.getboolean('split_trades'))
+                self.tixAmount.setValue(int(tix_settings['amount_to_trade']))
+                self.tixTradeAll.setChecked(tix_settings.getboolean('trade_all'))
+                self.tixEarlyCancel.setChecked(tix_settings.getboolean('early_cancel'))
 
-        tix_settings = config['TixTrader']
-        if tix_settings:
-            self.tixSplitTrades.setChecked(tix_settings.getboolean('split_trades'))
-            self.tixAmount.setValue(int(tix_settings['amount_to_trade']))
-            self.tixTradeAll.setChecked(tix_settings.getboolean('trade_all'))
-            self.tixEarlyCancel.setChecked(tix_settings.getboolean('early_cancel'))
-
-        robux_settings = config['RobuxTrader']
-        if robux_settings:
-            self.robuxSplitTrades.setChecked(robux_settings.getboolean('split_trades'))
-            self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
-            self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
-            self.robuxEarlyCancel.setChecked(robux_settings.getboolean('early_cancel'))
+                robux_settings = config['RobuxTrader']
+                self.robuxSplitTrades.setChecked(robux_settings.getboolean('split_trades'))
+                self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
+                self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
+                self.robuxEarlyCancel.setChecked(robux_settings.getboolean('early_cancel'))
 
     def save_config(self):
         config = configparser.ConfigParser()
-        config.read('config.ini')
+        with open('config.ini', 'a+'):
+            try:
+                config.read('config.ini')
+            except configparser.MissingSectionHeaderError:
+                pass
+        try:
+            tix_settings, robux_settings = config['TixTrader'], config['RobuxTrader']
+        except KeyError:          
+            config['TixTrader'] = config['RobuxTrader'] = {}
+            tix_settings, robux_settings = config['TixTrader'], config['RobuxTrader']                     
 
-        tix_settings = config['TixTrader']
         tix_settings['split_trades'] = str(self.tixSplitTrades.isChecked())
         tix_settings['amount_to_trade'] = str(self.tixAmount.value())
         tix_settings['trade_all'] = str(self.tixTradeAll.isChecked())
         tix_settings['early_cancel'] = str(self.tixEarlyCancel.isChecked())
+        tix_settings['threshold_rate'] = str(self.tixThresholdRate.value())
 
-        robux_settings = config['RobuxTrader']
         robux_settings['split_trades'] = str(self.robuxSplitTrades.isChecked())
         robux_settings['amount_to_trade'] = str(self.robuxAmount.value())
         robux_settings['trade_all'] = str(self.robuxTradeAll.isChecked())
         robux_settings['early_cancel'] = str(self.robuxEarlyCancel.isChecked())
+        robux_settings['threshold_rate'] = str(self.robuxThresholdRate.value())
+
         try:
-            with open('config.ini', 'r+') as configfile:
+            with open('config.ini', 'w+') as configfile:
                 config.write(configfile)
         except Exception as e:
             print(e)
@@ -193,6 +211,9 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
     def early_cancel_pressed(self, trader, state):
         trader.set_config('early_cancel', state == 2)
+
+    def threshold_rate_changed(self, trader, rate):
+        trader.set_config('threshold_rate', rate)
 
     def assign_thread(self, obj):
         thread = QtCore.QThread()

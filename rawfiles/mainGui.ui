@@ -809,7 +809,7 @@ QTabBar::tab:selected, QTabBar::tab:hover {
              <x>10</x>
              <y>10</y>
              <width>281</width>
-             <height>184</height>
+             <height>154</height>
             </rect>
            </property>
            <layout class="QFormLayout" name="formLayout_3">
@@ -855,7 +855,22 @@ QTabBar::tab:selected, QTabBar::tab:hover {
               </property>
              </widget>
             </item>
-            <item row="1" column="1">
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_3">
+              <property name="font">
+               <font>
+                <family>Segoe UI Black</family>
+                <pointsize>9</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>Trade when rate is below:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
              <widget class="QCheckBox" name="tixEarlyCancel">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Ignored">
@@ -868,7 +883,7 @@ QTabBar::tab:selected, QTabBar::tab:hover {
               </property>
              </widget>
             </item>
-            <item row="2" column="1">
+            <item row="4" column="1">
              <widget class="QCheckBox" name="tixTradeAll_2">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Ignored">
@@ -881,16 +896,26 @@ QTabBar::tab:selected, QTabBar::tab:hover {
               </property>
              </widget>
             </item>
-            <item row="3" column="1">
-             <widget class="QCheckBox" name="tixSplitTrades_2">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Minimum" vsizetype="Ignored">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
+            <item row="1" column="1">
+             <widget class="QCheckBox" name="tixEarlyCancel_2">
               <property name="text">
                <string/>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QDoubleSpinBox" name="tixThresholdRate">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <double>50.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.001000000000000</double>
+              </property>
+              <property name="value">
+               <double>20.000000000000000</double>
               </property>
              </widget>
             </item>
@@ -902,7 +927,7 @@ QTabBar::tab:selected, QTabBar::tab:hover {
              <x>320</x>
              <y>10</y>
              <width>282</width>
-             <height>161</height>
+             <height>151</height>
             </rect>
            </property>
            <layout class="QFormLayout" name="formLayout_4">
@@ -965,16 +990,31 @@ QTabBar::tab:selected, QTabBar::tab:hover {
               </item>
              </layout>
             </item>
-            <item row="2" column="1">
-             <widget class="QCheckBox" name="robuxTradeAll_2">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Minimum" vsizetype="Ignored">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_6">
+              <property name="font">
+               <font>
+                <family>Segoe UI Black</family>
+                <pointsize>9</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
               </property>
               <property name="text">
-               <string/>
+               <string>Trade when rate is above:</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QDoubleSpinBox" name="robuxThresholdRate">
+              <property name="decimals">
+               <number>3</number>
+              </property>
+              <property name="maximum">
+               <double>50.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>0.001000000000000</double>
               </property>
              </widget>
             </item>
@@ -1117,14 +1157,8 @@ QTabBar::tab:selected, QTabBar::tab:hover {
        </widget>
       </widget>
      </widget>
-     <zorder>verticalLayoutWidget_2</zorder>
-     <zorder>startButton</zorder>
-     <zorder>tabWidget_2</zorder>
-     <zorder>tabWidget</zorder>
     </widget>
    </widget>
-   <zorder>stackedWidget</zorder>
-   <zorder>tabWidget</zorder>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
