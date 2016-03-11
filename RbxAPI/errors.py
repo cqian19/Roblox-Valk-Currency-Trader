@@ -80,3 +80,6 @@ class OurTradeError(Exception):
 
     """Raised when we are trying to compete with our own trade"""
 
+class ThresholdRateError(Exception):
+
+    """Raised when current trade rate is worse than our user's settings rate"""

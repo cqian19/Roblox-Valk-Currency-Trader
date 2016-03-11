@@ -46,10 +46,9 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
         # Spin box
         self.tixAmount.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
         self.robuxAmount.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
-        self.tixThresholdRate.valueChanged.connect(partial(self.amount_changed, self.tix_trader))
-        self.robuxThresholdRate.valueChanged.connect(partial(self.amount_changed, self.robux_trader))
+        self.tixThresholdRate.valueChanged.connect(partial(self.threshold_rate_changed, self.tix_trader))
+        self.robuxThresholdRate.valueChanged.connect(partial(self.threshold_rate_changed, self.robux_trader))
         # Config settings
-        self.save_config
         self.initialize_config()
         # Start
         self.startButton.clicked.connect(self.start_pressed)

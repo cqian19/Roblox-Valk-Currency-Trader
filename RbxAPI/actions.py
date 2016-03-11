@@ -28,23 +28,21 @@ RGAP = .005 # Max gap before cancelling a robux split trade
 TGAP = .0025 # Max gap before cancelling a tix split trade
 TRADE_LAG_TIME = 1.25 # Estimate of how long it takes for Roblox to process our requests
 RESET_TIME = 240 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
-DEQUE_SIZE = 15 # Max number of past trade rates to keep track of to prevent loss
+DEQUE_SIZE = 15 # Max number of past trade rates to keep track of to money prevent loss
 # Initializing requests.Session for frozen application
-cacertpath = find_data_file('cacert.pem')
-os.environ["REQUESTS_CA_BUNDLE"] = cacertpath
+os.environ["REQUESTS_CA_BUNDLE"] = find_data_file('cacert.pem')
 session = requests.Session()
 session.mount("http://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.5)))
-session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.3)))
+session.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.5)))
 session = FuturesSession(session=session, max_workers=15)
 
 # Storing variables since they can't be stored in QObject
 class RateHandler():
-    last_tix_rate = 0.0
-    last_robux_rate = 0.0
-    current_tix_rate = 0.0
-    current_robux_rate = 0.0
-    past_tix_rates = deque(maxlen=DEQUE_SIZE)
-    past_robux_rates = deque(maxlen=DEQUE_SIZE)
+    last_tix_rate = 0
+    last_robux_rate = 0
+    current_tix_rate = 0
+    current_robux_rate = 0
+    past_tix_rates = past_robux_rates = deque(maxlen=DEQUE_SIZE)
 
 rates = RateHandler # Ghetto
 
@@ -71,7 +69,8 @@ class Trader(QtCore.QObject):
             'split_trades': '',
             'trade_all': False,
             'amount': 0,
-            'early_cancel': True
+            'early_cancel': True,
+            'threshold_rate': 0
         }
 
     @property
@@ -240,16 +239,16 @@ class Trader(QtCore.QObject):
                 raise BadSpreadError
             if this_top_rate <= 10:
                 raise LowRateError
-            # If we have a trade but its rate is not higher to the 4th decimal, increment the rate by .001
+            # If we have a trade but its rate is not higher to the 4th decimal, adjust the rate by .001
             if self.current_trade and round_down(self.current_trade.current_rate) == this_top_rate:
                 rate = self.get_better_rate(rate)
 
         other_threshold_rate = self.get_threshold_rate()
-        #Trade at top rate
-        #If that doesn't work, try trading at the second top rate instead
+        # Trade at top rate
+        # If that doesn't work, try trading at the second top rate instead
         try:
             return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
-        except (WorseRateError, BadSpreadError, TradeGapError) as e:
+        except (WorseRateError, BadSpreadError, TradeGapError, ThresholdRateError) as e:
             # If the second rate is our rate, raise an error
             if self.current_trade and not self.holds_top_trade:
                 our_amount = self.get_trade_remainder()
@@ -364,7 +363,8 @@ class Trader(QtCore.QObject):
                 print(e)
                 print("Connection interrupted")
             except (WorseRateError, LowRateError, BadSpreadError, MarketTraderError,
-                    TradeGapError,  NoMoneyError, OurTradeError, ZeroDivisionError) as e:
+                    TradeGapError,  NoMoneyError, OurTradeError, ZeroDivisionError,
+                    ThresholdRateError) as e:
                 logging.debug(e)
             except Exception as e:
                 logging.error(e)
@@ -402,6 +402,10 @@ class TixTrader(Trader):
         if super().check_no_recent_trades():
             rates.last_robux_rate = 0
             rates.past_robux_rates.clear()
+
+    def check_threshold_rate(self, rate):
+        our_threshold_rate = self.config['threshold_rate']
+
 
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade from the available tix column"""
@@ -469,6 +473,8 @@ class TixTrader(Trader):
         """Tests if the rate is better than the last rate"""
         last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
+        if self.config['threshold_rate'] and rate > self.config['threshold_rate']:
+            raise ThresholdRateError
         if rate - this_top_rate >= TGAP - .00001:
             raise TradeGapError
         if last_rate and rate > round_up(last_rate): # Rounding up may cause loss at up to 4th decimal point
@@ -621,6 +627,8 @@ class RobuxTrader(Trader):
         """Verifies that this is a better and profit making rate to trade at"""
         last_rate = rates.last_tix_rate
         logging.debug("Last tix rate: ", str(last_rate))
+        if self.config['threshold_rate'] and rate < self.config['threshold_rate']:
+            raise ThresholdRateError
         if not RobuxTrader.holds_top_trade and this_top_rate - rate >= RGAP:
             raise TradeGapError
         if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.

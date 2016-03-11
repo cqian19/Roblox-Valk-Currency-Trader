@@ -135,6 +135,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_4.setObjectName("verticalLayout_4")
         self.errorMessage = QtGui.QLabel(self.verticalLayoutWidget_4)
         self.errorMessage.setEnabled(True)
+        self.errorMessage.hide()
         font = QtGui.QFont()
         font.setFamily("Segoe UI Black")
         font.setWeight(50)
@@ -627,9 +628,7 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
 
         self.retranslateUi(MainWindow)
-        self.stackedWidget.setCurrentIndex(1)
         self.tabWidget_2.setCurrentIndex(0)
-        self.OptionsTabWidget.setCurrentIndex(1)
         self.currentTradeTable.setCurrentRow(-1)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
