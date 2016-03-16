@@ -42,9 +42,10 @@ class RateHandler():
     last_robux_rate = 0
     current_tix_rate = 0
     current_robux_rate = 0
-    past_tix_rates = past_robux_rates = deque(maxlen=DEQUE_SIZE)
+    past_tix_rates = deque(maxlen=DEQUE_SIZE)
+    past_robux_rates = deque(maxlen=DEQUE_SIZE)
 
-rates = RateHandler # Ghetto
+rates = RateHandler
 
 class Trader(QtCore.QObject):
 
@@ -229,7 +230,7 @@ class Trader(QtCore.QObject):
     def calculate_trade(self, amount):
         """Determines which rate to match."""
         spread = self.get_spread()
-        this_top_rate, second_top_rate, third_top_rate = (self.get_ith_trade_rate(i) for i in range(1, 4))
+        """this_top_rate, second_top_rate, third_top_rate = (self.get_ith_trade_rate(i) for i in range(1, 4))
         # Check if our trade is top trade
         if self.holds_top_trade:
             rate, next_rate = second_top_rate, third_top_rate
@@ -258,7 +259,30 @@ class Trader(QtCore.QObject):
                     raise OurTradeError
                 if our_amount == 0 or our_amount == second_trade_amount:
                     raise OurTradeError
-            return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)
+            return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)"""
+        this_top_rate = self.get_ith_trade_rate(1)
+        other_threshold_rate = self.get_threshold_rate()
+        our_amount = self.get_trade_remainder()
+        if spread > 10000 or spread < -10000:
+            raise BadSpreadError
+        if this_top_rate <= 10:
+            raise LowRateError
+
+        for i in range(1, 20):
+            try:
+                amount, cur_rate = self.get_trade_info(i)
+                if self.current_trade and not self.holds_top_trade:
+                    if our_amount == amount:
+                        raise OurTradeError
+                self.test_rate(cur_rate, this_top_rate, other_threshold_rate)
+                return self.balance_rate(amount, cur_rate, this_top_rate, other_threshold_rate)
+            except (WorseRateError, BadSpreadError, TradeGapError, ThresholdRateError) as e:
+                continue
+        if self.config['threshold_rate']:
+            return self.balance_rate(amount, self.other_trader.get_better_rate(self.config['threshold_rate']), 
+                                     this_top_rate, other_threshold_rate)
+        else:
+            raise WorseRateError
 
     @check_bot_stopped
     def submit_trade(self, amount_to_give, amount_to_receive):
@@ -391,7 +415,8 @@ class TixTrader(Trader):
         self.my_trader = TixTrader
         self.other_trader = RobuxTrader
 
-    def get_better_rate(self, rate):
+    @staticmethod
+    def get_better_rate(rate):
         """Returns a rate higher than the best rate."""
         return rate + .001
 
@@ -405,7 +430,6 @@ class TixTrader(Trader):
 
     def check_threshold_rate(self, rate):
         our_threshold_rate = self.config['threshold_rate']
-
 
     def get_available_trade_info(self, i):
         """Parses the trade information string of the ith trade from the available tix column"""
@@ -473,10 +497,11 @@ class TixTrader(Trader):
         """Tests if the rate is better than the last rate"""
         last_rate = rates.last_robux_rate
         logging.debug("Last robux rate: ", str(last_rate))
-        if self.config['threshold_rate'] and rate > self.config['threshold_rate']:
-            raise ThresholdRateError
-        if rate - this_top_rate >= TGAP - .00001:
-            raise TradeGapError
+        if not TixTrader.holds_top_trade:
+            if self.config['threshold_rate'] and rate > self.config['threshold_rate']:
+                raise ThresholdRateError
+            if rate - this_top_rate >= TGAP - .00001:
+                raise TradeGapError
         if last_rate and rate > round_up(last_rate): # Rounding up may cause loss at up to 4th decimal point
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:
@@ -532,7 +557,8 @@ class RobuxTrader(Trader):
         self.my_trader = RobuxTrader
         self.other_trader = TixTrader
 
-    def get_better_rate(self, rate):
+    @staticmethod
+    def get_better_rate(rate):
         """Returns a rate higher than the best rate"""
         return rate - .001
 
@@ -627,10 +653,11 @@ class RobuxTrader(Trader):
         """Verifies that this is a better and profit making rate to trade at"""
         last_rate = rates.last_tix_rate
         logging.debug("Last tix rate: ", str(last_rate))
-        if self.config['threshold_rate'] and rate < self.config['threshold_rate']:
-            raise ThresholdRateError
-        if not RobuxTrader.holds_top_trade and this_top_rate - rate >= RGAP:
-            raise TradeGapError
+        if not RobuxTrader.holds_top_trade:
+            if self.config['threshold_rate'] and rate < self.config['threshold_rate']:
+                raise ThresholdRateError
+            if this_top_rate - rate >= RGAP:
+                raise TradeGapError
         if last_rate and rate < round_down(last_rate): # IMPORTANT!: This potentially leads to trading at loss, but relies on early split trade cancelling.
             raise WorseRateError(self.currency, self.other_currency, rate, last_rate)
         elif not last_rate:

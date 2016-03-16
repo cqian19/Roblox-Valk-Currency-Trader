@@ -74,12 +74,16 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
                 self.tixAmount.setValue(int(tix_settings['amount_to_trade']))
                 self.tixTradeAll.setChecked(tix_settings.getboolean('trade_all'))
                 self.tixEarlyCancel.setChecked(tix_settings.getboolean('early_cancel'))
+                self.tixThresholdRate.setValue(float(tix_settings['threshold_rate']))
+                self.threshold_rate_changed(self.tix_trader, float(tix_settings['threshold_rate']))
 
                 robux_settings = config['RobuxTrader']
                 self.robuxSplitTrades.setChecked(robux_settings.getboolean('split_trades'))
                 self.robuxAmount.setValue(int(robux_settings['amount_to_trade']))
                 self.robuxTradeAll.setChecked(robux_settings.getboolean('trade_all'))
                 self.robuxEarlyCancel.setChecked(robux_settings.getboolean('early_cancel'))
+                self.robuxThresholdRate.setValue(float(robux_settings['threshold_rate']))
+                self.threshold_rate_changed(self.robux_trader, float(robux_settings['threshold_rate']))
 
     def save_config(self):
         config = configparser.ConfigParser()
@@ -213,7 +217,7 @@ class MainDialog(QtGui.QMainWindow, gui.Ui_MainWindow):
 
     def threshold_rate_changed(self, trader, rate):
         trader.set_config('threshold_rate', rate)
-
+        print(rate)
     def assign_thread(self, obj):
         thread = QtCore.QThread()
         obj.moveToThread(thread)
