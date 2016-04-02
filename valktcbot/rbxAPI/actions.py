@@ -450,7 +450,7 @@ class TixTrader(Trader):
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.current_rate - self.current_trade.start_rate
             nt_diff = self.current_trade.current_rate - next_rate
-            return start_diff >= TGAP - .00001 or nt_diff >= TGAP - .00001: # Float stuff
+            return start_diff >= TGAP - .00001 or nt_diff >= TGAP - .00001 # Float stuff
 
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
@@ -603,7 +603,7 @@ class RobuxTrader(Trader):
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.start_rate - self.current_trade.current_rate
             nt_diff = next_rate - self.current_trade.current_rate
-            return start_diff >= RGAP - .000001 or nt_diff >= RGAP - .000001: # Float stuff
+            return start_diff >= RGAP - .000001 or nt_diff >= RGAP - .000001 # Float stuff
 
     def check_better_rate(self):
         """Check if a better rate for robux to tix exists"""

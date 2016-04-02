@@ -31,7 +31,6 @@ abbr = {
     'Robux': 'R$'
 }
 
-
 class Trade(QObject):
 
     trade_updated = Signal(QObject)
