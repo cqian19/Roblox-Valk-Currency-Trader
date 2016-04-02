@@ -6,9 +6,8 @@ import os
 import sys
 
 includes = ['atexit', 'lxml.etree','lxml._elementpath']
-include_files = ['images/', 'guifiles/', 'config.ini', (requests.certs.where(),'cacert.pem'), 'C:\Windows\System32\msvcp100.dll']
-packages = ['sys', 'inspect', 'os', 'requests', 'PySide.QtGui', 'PySide.QtCore']
-
+include_files = ['config.ini', (requests.certs.where(),'cacert.pem'), 'C:\Windows\System32\msvcp100.dll', 'valkTCBot/rbxAPI', 'valkTCBot/guifiles']
+packages = ['easydict', 'cProfile', 'sys', 'inspect', 'os', 'requests', 'requests_futures', 'lxml', 'PySide.QtGui', 'PySide.QtCore']
 shortcut_table = [
     ("DesktopShortcut",        # Shortcut
      "DesktopFolder",          # Directory_
@@ -40,7 +39,6 @@ buildOptions = dict(
     include_files=include_files,
     packages=packages,
     includes=includes,
-    append_script_to_exe=True,
     include_msvcr=True,
 )
 
@@ -49,8 +47,11 @@ executables = [
     Executable(
         script='valktcbot/main.py',
         targetName='ValkTCBot.exe',
-        base='Win32GUI', #if sys.platform=='win32' else None, # THIS ONE IS IMPORTANT FOR GUI APPLICATION
-        icon='images/bot_desktop_icon.ico',
+        copyDependentFiles=True,
+        appendScriptToLibrary = True,
+        appendScriptToExe = True,
+        base='Win32GUI' if sys.platform=='win32' else None,
+        icon='valktcbot/images/bot_desktop_icon.ico',
     )
 ]
 
