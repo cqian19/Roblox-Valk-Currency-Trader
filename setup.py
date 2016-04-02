@@ -47,7 +47,7 @@ buildOptions = dict(
 
 executables = [
     Executable(
-        script='main.py',
+        script='valktcbot/main.py',
         targetName='ValkTCBot.exe',
         base='Win32GUI', #if sys.platform=='win32' else None, # THIS ONE IS IMPORTANT FOR GUI APPLICATION
         icon='images/bot_desktop_icon.ico',
@@ -56,7 +56,7 @@ executables = [
 
 setup(
     name="Valk TC Bot",
-    version="2.1.0",
+    version="2.5.0",
     description="Trade Currency Bot",
     options=dict(build_exe=buildOptions,bdist_msi=bdist_msi_options),
     executables=executables

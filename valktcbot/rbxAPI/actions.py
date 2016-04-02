@@ -4,6 +4,7 @@ from requests.packages.urllib3.util import Retry
 from requests_futures.sessions import FuturesSession
 from functools import wraps
 from collections import deque
+from easydict import EasyDict as DottedDict
 from .rbx_data import data, LOGIN_URL, TC_URL
 from .errors import *
 from .trade_log import Trade
@@ -29,22 +30,24 @@ TGAP = .0025 # Max gap before cancelling a tix split trade
 TRADE_LAG_TIME = 1.25 # Estimate of how long it takes for Roblox to process our requests
 RESET_TIME = 240 # Number of seconds the bot goes without trading before resetting last rates to be able to trade again (might result in loss)
 DEQUE_SIZE = 15 # Max number of past trade rates to keep track of to money prevent loss
+NUM_TRADES = 19 # Number of trades that display on the trade currency page
 # Initializing requests.Session for frozen application
 os.environ["REQUESTS_CA_BUNDLE"] = find_data_file('cacert.pem')
-session = FuturesSession(session=session, max_workers=15)
+session = FuturesSession(max_workers=15)
 adapter = requests.adapters.HTTPAdapter(max_retries=Retry(total=20,connect=10,read=10,backoff_factor=.5))
 session.mount("http://", adapter)
 session.mount("https://", adapter)
 # Storing variables since they can't be stored in QObject
-class RateHandler():
-    last_tix_rate = 0
-    last_robux_rate = 0
-    current_tix_rate = 0
-    current_robux_rate = 0
-    past_tix_rates = deque(maxlen=DEQUE_SIZE)
-    past_robux_rates = deque(maxlen=DEQUE_SIZE)
-
-rates = RateHandler
+rates = DottedDict(
+    dict(
+        last_tix_rate = 0,
+        last_robux_rate = 0,
+        current_tix_rate = 0,
+        current_robux_rate = 0,
+        past_tix_rates = deque(maxlen=DEQUE_SIZE),
+        past_robux_rates = deque(maxlen=DEQUE_SIZE),
+    )
+)
 
 class Trader(QtCore.QObject):
 
@@ -156,8 +159,7 @@ class Trader(QtCore.QObject):
 
     def get_trade_count(self):
         trades = list(self.get_raw_data(data[self.currency]['open_trades'], False))
-        trade_count = len(trades)
-        return trade_count
+        return len(trades)
 
     def get_trade_info(self, index):
         """Gets the trade info starting from the top (index = 0)"""
@@ -227,38 +229,10 @@ class Trader(QtCore.QObject):
 
     @check_bot_stopped
     def calculate_trade(self, amount):
-        """Determines which rate to match."""
+        """Determines which trade rate to match and returns the amount to trade and the amount to receive.
+           If none of the trade rates currently displayed are better than the threshold rate setting, we trade at the
+           threshold rate instead."""
         spread = self.get_spread()
-        """this_top_rate, second_top_rate, third_top_rate = (self.get_ith_trade_rate(i) for i in range(1, 4))
-        # Check if our trade is top trade
-        if self.holds_top_trade:
-            rate, next_rate = second_top_rate, third_top_rate
-        else:
-            rate, next_rate = this_top_rate, second_top_rate
-            if spread > 10000 or spread < -10000:
-                raise BadSpreadError
-            if this_top_rate <= 10:
-                raise LowRateError
-            # If we have a trade but its rate is not higher to the 4th decimal, adjust the rate by .001
-            if self.current_trade and round_down(self.current_trade.current_rate) == this_top_rate:
-                rate = self.get_better_rate(rate)
-
-        other_threshold_rate = self.get_threshold_rate()
-        # Trade at top rate
-        # If that doesn't work, try trading at the second top rate instead
-        try:
-            return self.balance_rate(amount, rate, this_top_rate, other_threshold_rate)
-        except (WorseRateError, BadSpreadError, TradeGapError, ThresholdRateError) as e:
-            # If the second rate is our rate, raise an error
-            if self.current_trade and not self.holds_top_trade:
-                our_amount = self.get_trade_remainder()
-                second_trade_amount = self.get_ith_trade_amount(2)
-                # Check if trade has not gone through on Roblox's server
-                if self.current_trade.amount1 == second_trade_amount:
-                    raise OurTradeError
-                if our_amount == 0 or our_amount == second_trade_amount:
-                    raise OurTradeError
-            return self.balance_rate(amount, next_rate, this_top_rate, other_threshold_rate)"""
         this_top_rate = self.get_ith_trade_rate(1)
         other_threshold_rate = self.get_threshold_rate()
         our_amount = self.get_trade_remainder()
@@ -267,18 +241,27 @@ class Trader(QtCore.QObject):
         if this_top_rate <= 10:
             raise LowRateError
 
-        for i in range(1, 20):
+        for i in range(1, NUM_TRADES + 1):
             try:
                 cur_amount, cur_rate = self.get_trade_info(i)
                 if self.current_trade and not self.holds_top_trade:
-                    if our_amount == cur_amount or our_amount == 0:
+                    if (
+                        our_amount == cur_amount and 
+                        round_down(self.current_trade.current_rate == cur_rate) or
+                        our_amount == 0
+                        ):
                         raise OurTradeError
+                    elif (round_down(self.current_trade.current_rate == cur_rate) and our_amount != cur_amount):
+                        cur_rate = self.get_better_rate(cur_rate)
                 self.test_rate(cur_rate, this_top_rate, other_threshold_rate)
                 return self.balance_rate(amount, cur_rate, this_top_rate, other_threshold_rate)
             except (WorseRateError, BadSpreadError, TradeGapError, ThresholdRateError) as e:
                 continue
         if self.config['threshold_rate']:
-            if not self.current_trade or abs(self.current_trade.current_rate - self.config['threshold_rate'] > .005):
+            if (
+                not self.current_trade or 
+                abs(self.current_trade.current_rate - self.config['threshold_rate']) > .005
+                ):
                 return self.balance_rate(amount, self.other_trader.get_better_rate(self.config['threshold_rate']), 
                                          this_top_rate, other_threshold_rate)
         raise ThresholdRateError
@@ -294,16 +277,12 @@ class Trader(QtCore.QObject):
         session.post(TC_URL, data=self.trade_payload)
         self.last_trade_start_time = time.time()
 
-    def cancel_trades(self):
-        """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
+    def _iter_trades_cancel(self, filt=lambda i: True):
         trade_count = self.get_trade_count()
-        if self.current_trade:
-            self.update_current_trade()
-            self.current_trade = None
-            self.set_current_rate(0)
         for i in range(trade_count, 0, -1):
-            #Cancelling top trade
-            vs, ev = self.get_auth_tools()
+            if not filt(i): 
+                continue
+            vs, ev = self.get_auth_tools() # Cancel ith trade if condition is met
             payload = {
                 '__EVENTTARGET': self.get_ith_cancel_bid(i),
                 '__EVENTVALIDATION': ev,
@@ -311,23 +290,26 @@ class Trader(QtCore.QObject):
             }
             session.post(TC_URL, data=payload)
 
+    def cancel_trades(self):
+        """Cancels all existing trades. Useful if we accidentally submit multiple trades due to server lag."""
+        if self.current_trade:
+            self.update_current_trade()
+            self.current_trade = None
+            self.set_current_rate(0)
+        self._iter_trades_cancel()
+
     def cancel_other_trades(self):
         """Cancels all trades except the current trade"""
         if self.current_trade:
             trade_count = self.get_trade_count()
             detected = False
-            for i in range(trade_count, 0, -1):
-                remainder = self.get_trade_remainder(i)
-                if remainder != self.current_trade.remaining1 or detected:
-                    vs, ev = self.get_auth_tools()
-                    payload = {
-                        '__EVENTTARGET': self.get_ith_cancel_bid(i),
-                        '__EVENTVALIDATION': ev,
-                        '__VIEWSTATE': vs
-                    }
-                    session.post(TC_URL, data=payload)
+            def filt(i):
+                nonlocal detected
+                if self.get_trade_remainder(i) != self.current_trade.remaining1 or detected:
+                    return True
                 else:
                     detected = True
+            self._iter_trades_cancel(filt)
         else:
             self.cancel_trades()
 
@@ -349,7 +331,6 @@ class Trader(QtCore.QObject):
         if self.check_trades():
             self.cancel_trades()
         self.submit_trade(to_trade, receive)
-
         self.set_current_rate(rate)
 
         new_trade = Trade(to_trade, receive, self.currency, self.other_currency, rate)
@@ -371,13 +352,13 @@ class Trader(QtCore.QObject):
                             self.do_trade()
                     else:
                         self.do_trade()
-                elif self.get_trade_count() > 1: #Lag error? Better clean it up.
+                elif self.get_trade_count() > 1: # Lag error? Better clean it up.
                     self.cancel_other_trades()
                 elif self.current_trade:
                     if self.check_better_rate():
                         self.do_trade()
-                    else:
-                        self.check_trade_gap()
+                    elif self.check_trade_gap():
+                        self.do_trade()
                 else:
                     self.cancel_trades()
             except BotStoppedError:
@@ -469,9 +450,7 @@ class TixTrader(Trader):
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.current_rate - self.current_trade.start_rate
             nt_diff = self.current_trade.current_rate - next_rate
-            #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if start_diff >= TGAP - .00001 or nt_diff >= TGAP - .00001: # Float stuff
-                self.do_trade()
+            return start_diff >= TGAP - .00001 or nt_diff >= TGAP - .00001: # Float stuff
 
     def check_better_rate(self):
         """Check if a better rate for tix to robux exists, updates the GUI if our trade is top"""
@@ -610,7 +589,7 @@ class RobuxTrader(Trader):
     def check_at_market(self):
         """Checks if the top robux trade is @ Market"""
         trade_info_path = self.get_ith_trade_path(1, 'Robux') # Gets top robux trade xpath
-        #Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
+        # Format ['\r\n (bunch of spaces)', ' @ 1:rate\r\n'] Second part is rate info
         trade_info = self.get_raw_data(trade_info_path[1])
         if not len(trade_info):
             raise requests.exceptions.ConnectionError
@@ -624,9 +603,7 @@ class RobuxTrader(Trader):
             next_rate = self.get_ith_trade_rate(2)
             start_diff = self.current_trade.start_rate - self.current_trade.current_rate
             nt_diff = next_rate - self.current_trade.current_rate
-            #if self.current_trade.amount1 == self.current_trade.remaining1:
-            if start_diff >= RGAP - .000001 or nt_diff >= RGAP - .000001: # Float stuff
-                self.do_trade()
+            return start_diff >= RGAP - .000001 or nt_diff >= RGAP - .000001: # Float stuff
 
     def check_better_rate(self):
         """Check if a better rate for robux to tix exists"""
