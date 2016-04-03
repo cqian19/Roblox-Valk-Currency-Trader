@@ -1,5 +1,5 @@
-# Roblox Valk Trade Currency Bot  <image height=45 width=45 src=./images/bot_icon.png>
-Valk TC Bot is a new, fully-functional trade currency bot for ROBLOX built with an intuitive GUI using [PySide](https://pyside.github.io/docs/pyside/index.html). The bot trades between currencies to make a profit.
+# Roblox Valk Trade Currency Bot  <image height=45 width=45 src=./valktcbot/images/bot_icon.png>
+Valk TC Bot is a new, fully-functional Roblox trade currency bot built with an easy-to-use GUI using [PySide](https://pyside.github.io/docs/pyside/index.html). The bot trades between currencies to make a profit.
 
 ## Updates
  **4/2 - Roblox is removing the trade currency system on 4/13. After that date, this bot will no longer be functional.  I am releasing the final version of this bot today for people who want to get last minute trades in. It's been a good run.**
@@ -17,8 +17,9 @@ Only supports Windows.
  - Able to trade both currencies at the same time (Most bots trade only one currency at a time).
  - Fast, accurate trading to avoid losing money.
  - Login and trade from the GUI. No browser needs to be opened.
+
 ## Guide
-1. Open ValkTCBot.exe
+1. Open ValkTCBot.exe or double-click the shortcut
 2. The first screen is a login screen. A successful ROBLOX login will lead to the second screen with the bot settings.
 3. Enter the amount of tickets/robux to trade, OR check the "Trade all" checkbox.
 4. Press the "Start" button to begin the bot, and "Stop" to finish.
