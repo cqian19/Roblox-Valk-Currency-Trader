@@ -17,8 +17,9 @@ Only supports Windows.
  - Able to trade both currencies at the same time (Most bots trade only one currency at a time).
  - Fast, accurate trading to avoid losing money.
  - Login and trade from the GUI. No browser needs to be opened.
+
 ## Guide
-1. Open ValkTCBot.exe
+1. Open ValkTCBot.exe or double-click the shortcut
 2. The first screen is a login screen. A successful ROBLOX login will lead to the second screen with the bot settings.
 3. Enter the amount of tickets/robux to trade, OR check the "Trade all" checkbox.
 4. Press the "Start" button to begin the bot, and "Stop" to finish.
