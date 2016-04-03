@@ -1,4 +1,4 @@
-# Roblox Valk Trade Currency Bot  <image height=45 width=45 src=./images/bot_icon.png>
+# Roblox Valk Trade Currency Bot  <image height=45 width=45 src=./valktcbot/images/bot_icon.png>
 Valk TC Bot is a new, fully-functional trade currency bot for ROBLOX built with an intuitive GUI using [PySide](https://pyside.github.io/docs/pyside/index.html). The bot trades between currencies to make a profit.
 
 ## Updates
