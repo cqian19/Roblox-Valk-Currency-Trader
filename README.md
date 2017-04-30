@@ -1,9 +1,9 @@
-## As of April 14, 2016, the trade currency system was removed and this bot no longer works.  
+## A relic from when Roblox had a trade currency system 
 # Roblox Valk Trade Currency Bot  <image height=45 width=45 src=./valktcbot/images/bot_icon.png>
 Valk TC Bot is a Roblox trade currency bot built with an easy-to-use GUI using [PySide](https://pyside.github.io/docs/pyside/index.html). The bot trades between currencies to make a profit.
 
 ## Updates
- **4/14 Trade currency removed. Bot no longer works.**
+ **4/14/16 Trade currency system has been removed. Bot no longer works. Rest in peace.**
   
  **v2.5 - 4/2 Final release. View the release notes [here!][current_download]**
 
